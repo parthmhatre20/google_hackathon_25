@@ -2,11 +2,13 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.models import (
     TranscriptionRequest, TranscriptionResponse,
     AnalysisRequest, AnalysisResponse,
-    SaveAttemptRequest, InterviewAttempt
+    SaveAttemptRequest, InterviewAttempt,
+    GenerateQuestionsRequest, GenerateQuestionsResponse
 )
 from app.services.speech_service import speech_service
 from app.services.ai_service import ai_service
 from app.services.firebase_service import firebase_service
+from app.services.question_generator import question_generator_service
 import base64
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
@@ -145,3 +147,17 @@ async def get_interview_questions():
     ]
     
     return {"questions": questions}
+
+@router.post("/generate-questions", response_model=GenerateQuestionsResponse)
+async def generate_personalized_questions(request: GenerateQuestionsRequest):
+    """
+    Generate personalized interview questions based on resume and domain
+    
+    This endpoint uses Gemini AI to analyze the candidate's resume and generate
+    tailored interview questions specific to their experience and chosen domain.
+    """
+    try:
+        response = await question_generator_service.generate_questions(request)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

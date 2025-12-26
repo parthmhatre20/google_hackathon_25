@@ -57,3 +57,19 @@ class UserProgress(BaseModel):
     total_attempts: int
     average_score: float
     recent_attempts: List[InterviewAttempt]
+
+class GenerateQuestionsRequest(BaseModel):
+    resume_text: str = Field(..., min_length=10, description="Resume text or summary")
+    domain: str = Field(..., description="Domain like Web Development, Data Science, ML, etc.")
+    num_questions: int = Field(default=5, ge=3, le=10, description="Number of questions to generate")
+
+class GeneratedQuestion(BaseModel):
+    question_id: str
+    question_text: str
+    category: str
+    reasoning: Optional[str] = None
+
+class GenerateQuestionsResponse(BaseModel):
+    domain: str
+    questions: List[GeneratedQuestion]
+    resume_summary: Optional[str] = None
