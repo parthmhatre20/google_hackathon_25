@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+from app.services.question_generator import question_generator_service
+from app.models import GenerateQuestionsRequest, GenerateQuestionsResponse
+
 from app.models import (
     TranscriptionRequest, TranscriptionResponse,
     AnalysisRequest, AnalysisResponse,
@@ -271,3 +274,15 @@ async def get_next_question(current_question_id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/generate-questions", response_model=GenerateQuestionsResponse)
+async def generate_questions(request: GenerateQuestionsRequest):
+    """
+    Generate personalized interview questions based on resume & domain
+    """
+    try:
+        result = await question_generator_service.generate_questions(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
