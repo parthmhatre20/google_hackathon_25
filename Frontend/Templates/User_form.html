@@ -1,0 +1,138 @@
+<div class="w-full max-w-lg mx-auto p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl">
+  <h2 class="text-white text-xl font-medium mb-6 tracking-tight">Start New Mock Interview</h2>
+
+  <!-- Form -->
+  <form class="space-y-6">
+
+    <!-- Job Role - Combo box (select + searchable input) -->
+    <div class="space-y-2">
+      <label for="job-role" class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Job Role</label>
+      
+      <div class="relative">
+        <select 
+          id="job-role" 
+          class="w-full h-12 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-xl px-4 pr-10 appearance-none focus:outline-none focus:border-emerald-500/50 transition-colors"
+          onchange="handleJobRoleSelect(this)"
+        >
+          <option value="" disabled selected>Select or type a role...</option>
+          <option value="Senior Backend Engineer">Senior Backend Engineer</option>
+          <option value="Frontend Engineer">Frontend Engineer</option>
+          <option value="Full Stack Developer">Full Stack Developer</option>
+          <option value="System Design Interviewer">System Design (General)</option>
+          <option value="Machine Learning Engineer">Machine Learning Engineer</option>
+          <option value="DevOps Engineer">DevOps Engineer</option>
+          <option value="Staff Software Engineer">Staff Software Engineer</option>
+          <option value="Engineering Manager">Engineering Manager</option>
+        </select>
+        
+        <!-- Custom searchable input that appears when needed -->
+        <input 
+          type="text" 
+          id="job-role-custom" 
+          placeholder="Type custom role..." 
+          class="hidden w-full h-12 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-xl px-4 focus:outline-none focus:border-emerald-500/50 transition-colors"
+        />
+        
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <i data-lucide="chevron-down" class="w-5 h-5 text-zinc-500"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- CV Upload -->
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Upload CV (Optional)</label>
+      
+      <div class="relative group">
+        <label 
+          for="cv-upload" 
+          class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-zinc-700 rounded-xl bg-zinc-900/50 hover:bg-zinc-900/70 hover:border-zinc-600 transition-all cursor-pointer"
+        >
+          <div class="flex flex-col items-center justify-center pt-5 pb-6">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3">
+              <i data-lucide="upload" class="w-6 h-6 text-emerald-400"></i>
+            </div>
+            <p class="text-sm text-zinc-400 mb-1">
+              <span class="text-emerald-400 font-medium">Click to upload</span> or drag & drop
+            </p>
+            <p class="text-xs text-zinc-500">PDF, DOCX • Max 10MB</p>
+          </div>
+          <input 
+            id="cv-upload" 
+            type="file" 
+            accept=".pdf,.doc,.docx" 
+            class="hidden"
+          />
+        </label>
+        
+        <!-- File name preview -->
+        <div id="file-name" class="hidden mt-2 text-sm text-zinc-400 truncate"></div>
+      </div>
+    </div>
+
+    <!-- Difficulty Level -->
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Difficulty Level</label>
+      
+      <div class="grid grid-cols-3 gap-3">
+        <label class="relative">
+          <input type="radio" name="difficulty" value="easy" class="peer sr-only" checked />
+          <div class="flex flex-col items-center justify-center h-20 bg-zinc-900 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 peer-checked:border-emerald-500/50 peer-checked:bg-emerald-950/20 transition-all">
+            <span class="text-2xl mb-1">😊</span>
+            <span class="text-sm font-medium text-zinc-300">Easy</span>
+          </div>
+        </label>
+        
+        <label class="relative">
+          <input type="radio" name="difficulty" value="medium" class="peer sr-only" />
+          <div class="flex flex-col items-center justify-center h-20 bg-zinc-900 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 peer-checked:border-emerald-500/50 peer-checked:bg-emerald-950/20 transition-all">
+            <span class="text-2xl mb-1">⚡</span>
+            <span class="text-sm font-medium text-zinc-300">Medium</span>
+          </div>
+        </label>
+        
+        <label class="relative">
+          <input type="radio" name="difficulty" value="hard" class="peer sr-only" />
+          <div class="flex flex-col items-center justify-center h-20 bg-zinc-900 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 peer-checked:border-emerald-500/50 peer-checked:bg-emerald-950/20 transition-all">
+            <span class="text-2xl mb-1">🔥</span>
+            <span class="text-sm font-medium text-zinc-300">Hard</span>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Submit Button -->
+    <button 
+      type="submit"
+      class="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors mt-8 shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
+    >
+      <i data-lucide="play" class="w-5 h-5"></i>
+      Start Interview
+    </button>
+
+  </form>
+</div>
+
+<!-- Minimal JS for select/input toggle & file name preview -->
+<script>
+function handleJobRoleSelect(select) {
+  const customInput = document.getElementById('job-role-custom');
+  if (select.value === '' || !Array.from(select.options).some(opt => opt.value === select.value)) {
+    customInput.classList.remove('hidden');
+    customInput.focus();
+  } else {
+    customInput.classList.add('hidden');
+  }
+}
+
+// File name preview
+document.getElementById('cv-upload').addEventListener('change', function(e) {
+  const fileNameDiv = document.getElementById('file-name');
+  if (this.files.length > 0) {
+    fileNameDiv.textContent = this.files[0].name;
+    fileNameDiv.classList.remove('hidden');
+  } else {
+    fileNameDiv.classList.add('hidden');
+  }
+});
+</script>
