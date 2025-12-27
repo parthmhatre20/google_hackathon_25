@@ -59,8 +59,8 @@ class UserProgress(BaseModel):
     recent_attempts: List[InterviewAttempt]
 
 class GenerateQuestionsRequest(BaseModel):
-    resume_text: str = Field(..., min_length=10, description="Resume text or summary")
-    domain: str = Field(..., description="Domain like Web Development, Data Science, ML, etc.")
+    resume_text: Optional[str] = Field(default="", description="Resume text, CV content, or user background")
+    domain: str = Field(..., description="Domain like Frontend Engineer, Backend Engineer, ML Engineer, etc.")
     num_questions: int = Field(default=5, ge=3, le=10, description="Number of questions to generate")
 
 class GeneratedQuestion(BaseModel):

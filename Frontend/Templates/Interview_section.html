@@ -5,6 +5,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+    <script src="{{ url_for('static', filename='api.js') }}" defer></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         /* Custom scrollbar for a cleaner look */
@@ -22,9 +23,9 @@
         }
 
         /* Default (idle) */
-    [data-state="idle"] .stop-btn,
+    [data-state="idle"] .cancel-btn,
     [data-state="idle"] .listening,
-    [data-state="idle"] .mic-icon,
+    [data-state="idle"] .stop-mic-btn,
     [data-state="idle"] .avatar-listening-text,
     [data-state="idle"] .AI-listening,
     [data-state="idle"] .timer {
@@ -34,6 +35,10 @@
         /* Listening state */
     [data-state="listening"] .speak-btn {
         display: none;
+    }
+    
+    [data-state="listening"] .stop-mic-btn {
+        display: flex !important;
     }
 
     [data-state="listening"] .timer {
@@ -155,8 +160,8 @@
 
             <!-- Chat Area -->
             <main id="main-view" data-view="form" class="flex-1 flex flex-col relative bg-gradient-to-b from-zinc-950 to-zinc-950/95">
-                <section class="view-form">
-                    <div class="flex-1 flex items-center justify-center p-8">
+                <section class="view-form overflow-y-auto">
+                    <div class="flex-1 flex items-start justify-center p-8 py-12">
                     <div class="w-full max-w-lg mx-auto p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl">
                     <h2 class="text-white text-xl font-medium mb-6 tracking-tight">Start New Mock Interview</h2>
                     <!-- Form -->
@@ -194,6 +199,18 @@
                         <i data-lucide="chevron-down" class="w-5 h-5 text-zinc-500"></i>
                         </div>
                     </div>
+                    </div>
+
+                    <!-- About You / Background -->
+                    <div class="space-y-2">
+                    <label for="background" class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">About You (Recommended)</label>
+                    <textarea 
+                        id="background" 
+                        placeholder="Tell the AI about yourself: skills you know (e.g., Python, React), projects you've worked on, areas of expertise... This helps generate better, personalized questions."
+                        rows="4"
+                        class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none text-sm"
+                    ></textarea>
+                    <p class="text-xs text-zinc-500">💡 Example: "I know HTML, CSS, JavaScript, React. Built e-commerce site, weather app. Learning Next.js."</p>
                     </div>
 
                     <!-- CV Upload -->
@@ -260,11 +277,12 @@
 
                     <!-- Submit Button -->
                     <button 
+                    id="start-interview-btn"
                     type="submit"
-                    class="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors mt-8 shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
+                    class="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors mt-8 shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                     <i data-lucide="play" class="w-5 h-5"></i>
-                    Start Interview
+                    <span id="start-btn-text">Start Interview</span>
                     </button>
 
                     </form>
@@ -275,7 +293,7 @@
                 <section class="view-chat">
                     <div class="flex-1 flex flex-col">
                     <!-- Messages Container -->
-                    <div class="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth pb-32">
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth pb-32">
                         
                         <!-- AI Message -->
                         <div class="flex gap-4 max-w-3xl">
@@ -329,32 +347,51 @@
                             <!-- Glow effect -->
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none"></div>
 
-                            <!-- Mic Icon -->
-                            <div class="mic-icon w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20">
-                                <i data-lucide="mic" class="w-5 h-5 text-rose-500"></i>
-                            </div>
-
-                            <!-- Text & Visualization -->
-                            <div class="listening flex-1 flex items-center gap-4 min-w-0">
-                                <span class="text-zinc-400 text-lg truncate font-light">Listening to your answer...</span>
-                                
-                                <!-- Audio Wave Visualization -->
-                                <div class="flex items-center gap-1 h-6">
-                                    <div class="w-1 bg-emerald-500/50 rounded-full wave-bar" style="animation-delay: 0.1s; height: 40%"></div>
-                                    <div class="w-1 bg-emerald-500/70 rounded-full wave-bar" style="animation-delay: 0.2s; height: 70%"></div>
-                                    <div class="w-1 bg-emerald-500 rounded-full wave-bar" style="animation-delay: 0.3s; height: 100%"></div>
-                                    <div class="w-1 bg-emerald-500/70 rounded-full wave-bar" style="animation-delay: 0.4s; height: 60%"></div>
-                                    <div class="w-1 bg-emerald-500/50 rounded-full wave-bar" style="animation-delay: 0.5s; height: 30%"></div>
+                            <!-- Processing Indicator -->
+                            <div id="processing-indicator" class="hidden flex-1 flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20 animate-pulse">
+                                    <i data-lucide="loader-2" class="w-5 h-5 text-indigo-500 animate-spin"></i>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <span id="processing-stage" class="text-indigo-400 text-lg font-light">Processing your answer...</span>
+                                    <span class="text-indigo-600 text-sm">Please wait, do not record again</span>
                                 </div>
                             </div>
 
-                            <!-- Stop Button -->
-                            <button onclick="stopListening()" class="stop-btn px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-lg border border-zinc-700 transition-colors shadow-sm">
-                                Stop
-                            </button>
-                            <button onclick="startListening()" class="w-full speak-btn px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-lg border border-zinc-700 transition-colors shadow-sm">
-                                Speak
-                            </button>  
+                            <!-- Recording UI -->
+                            <div id="recording-ui" class="flex-1 flex items-center gap-6">
+                                <!-- Text & Visualization -->
+                                <div class="listening flex-1 flex items-center gap-4 min-w-0">
+                                    <span id="recording-text" class="text-zinc-400 text-lg truncate font-light">Listening to your answer...</span>
+                                    
+                                    <!-- Audio Wave Visualization -->
+                                    <div class="flex items-center gap-1 h-6">
+                                        <div class="w-1 bg-emerald-500/50 rounded-full wave-bar" style="animation-delay: 0.1s; height: 40%"></div>
+                                        <div class="w-1 bg-emerald-500/70 rounded-full wave-bar" style="animation-delay: 0.2s; height: 70%"></div>
+                                        <div class="w-1 bg-emerald-500 rounded-full wave-bar" style="animation-delay: 0.3s; height: 100%"></div>
+                                        <div class="w-1 bg-emerald-500/70 rounded-full wave-bar" style="animation-delay: 0.4s; height: 60%"></div>
+                                        <div class="w-1 bg-emerald-500/50 rounded-full wave-bar" style="animation-delay: 0.5s; height: 30%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Cancel Button (when recording) -->
+                                <button onclick="cancelRecording()" class="cancel-btn px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-sm font-medium rounded-lg border border-zinc-700 transition-colors shadow-sm flex items-center gap-2">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                    <span>Cancel</span>
+                                </button>
+
+                                <!-- Start Recording Button (when idle) -->
+                                <button onclick="startRecording()" class="w-full speak-btn px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-base font-medium rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
+                                    <i data-lucide="mic" class="w-5 h-5"></i>
+                                    <span>Start Recording</span>
+                                </button>
+                                
+                                <!-- STOP Button (when recording) - Replaces mic button -->
+                                <button onclick="handleMicClick()" class="stop-mic-btn hidden px-8 py-3 bg-red-600 hover:bg-red-500 text-white text-base font-bold rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
+                                    <div class="w-4 h-4 bg-white rounded-sm"></div>
+                                    <span>STOP</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     </div>
@@ -417,6 +454,29 @@
         // Make functions accessible to inline HTML onclick
         window.startListening = startListening
         window.stopListening = stopListening
+        
+        // -------- New recording functions from test page --------
+        window.handleMicClick = function() {
+            stopListening()
+            window.stopRecording?.()
+        }
+        
+        window.cancelRecording = function() {
+            stopListening()
+            // Silent cancel - no notification
+        }
+        
+        window.startRecording = function() {
+            startListening()
+            // Actual recording logic handled by api.js
+        }
+        
+        window.updateProcessingStage = function(message) {
+            const stageElement = document.getElementById('processing-stage')
+            if (stageElement) {
+                stageElement.textContent = message
+            }
+        }
 
         // -------- Form Logic --------
         function handleJobRoleSelect(select) {
@@ -462,6 +522,25 @@
 
         mockForm?.addEventListener("submit", (e) => {
             e.preventDefault()
+            
+            // Disable button to prevent double clicks
+            const startBtn = document.getElementById('start-interview-btn')
+            const btnText = document.getElementById('start-btn-text')
+            if (startBtn && !startBtn.disabled) {
+                startBtn.disabled = true
+                if (btnText) btnText.textContent = 'Starting...'
+                
+                // Re-enable after switching view
+                setTimeout(() => {
+                    startBtn.disabled = false
+                    if (btnText) btnText.textContent = 'Start Interview'
+                }, 1000)
+            }
+            
+            // Get background text for personalized questions
+            const backgroundText = document.getElementById('background')?.value || ''
+            console.log('User background:', backgroundText)
+            
             mainView.dataset.view = "chat"
             bar.dataset.state = "idle"
         })
