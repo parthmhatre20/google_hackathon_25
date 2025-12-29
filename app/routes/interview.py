@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from app.services.question_generator import question_generator_service
+from app.services.interview_store import create_interview_session
+from app.services.answer_store import save_interview_answer
 from app.models import GenerateQuestionsRequest, GenerateQuestionsResponse
 
 from app.models import (
@@ -30,6 +32,47 @@ INTERVIEW_QUESTIONS = {
 
 class QuestionSpeakRequest(BaseModel):
     question_id: str
+
+@router.post("/start-session")
+async def start_interview_session(
+    user_id: str = Form(...),
+    domain: str = Form(...)
+ ):
+    """
+    Phase 2: Start a new interview session and store it in Firebase
+    """
+    session_id = create_interview_session(user_id, domain)
+
+    return {
+        "message": "Interview session started",
+        "session_id": session_id
+    }
+
+
+@router.post("/save-answer")
+async def save_answer(
+    session_id: str = Form(...),
+    question_id: str = Form(...),
+    question_text: str = Form(...),
+    transcription: str = Form(...),
+    confidence: float = Form(...)
+):
+    """
+    Phase 3: Save spoken answer & transcript to Firebase
+    """
+    answer_id = save_interview_answer(
+        session_id=session_id,
+        question_id=question_id,
+        question_text=question_text,
+        transcription=transcription,
+        confidence=confidence
+    )
+
+    return {
+        "message": "Answer saved successfully",
+        "answer_id": answer_id
+    }
+
 
 @router.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(request: TranscriptionRequest):

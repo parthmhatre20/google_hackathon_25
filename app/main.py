@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routes import interview_router, feedback_router
+from app.routes import interview_router, feedback_router, test_firebase_router
 
 # Create FastAPI application
 app = FastAPI(
@@ -22,6 +22,7 @@ app.add_middleware(
 # Include routers
 app.include_router(interview_router)
 app.include_router(feedback_router)
+app.include_router(test_firebase_router)
 
 @app.get("/")
 async def root():
