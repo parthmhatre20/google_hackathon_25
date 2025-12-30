@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-app = Flask('__name__',template_folder='templates')
+# Use capital 'T' for Templates folder (Linux is case-sensitive!)
+app = Flask(__name__, template_folder='Templates')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Initialize Firebase only if not already initialized (combined server may init first)
