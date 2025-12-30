@@ -1,66 +1,64 @@
 import base64
 import tempfile
 import os
+import httpx
 
 
 class SpeechService:
     def __init__(self):
-        self.model = None
-        self.use_whisper = False
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
         
-        # Try to load Whisper
-        try:
-            import whisper
-            import torch
-            
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            print(f"🎤 Whisper running on: {self.device}")
-            
-            # Use 'base' model - best balance of speed and accuracy for hackathon
-            # tiny = fastest, less accurate
-            # base = good balance (recommended)
-            # small = more accurate, slower
-            self.model = whisper.load_model("base", device=self.device)
-            self.use_whisper = True
-            print("✅ Whisper model loaded (base - optimized for accuracy)!")
-        except ImportError as e:
-            print(f"⚠️ Whisper not installed: {e}")
-            print("   Install with: pip install openai-whisper torch")
-        except Exception as e:
-            print(f"⚠️ Whisper initialization failed: {e}")
+        if self.groq_api_key:
+            print("✅ Groq Whisper API configured!")
+        else:
+            print("⚠️ GROQ_API_KEY not found - speech transcription will not work")
 
     async def transcribe_audio(self, audio_base64: str):
-        if not self.use_whisper or not self.model:
-            # Return empty - browser will handle transcription
-            print("⚠️ Whisper not available, returning empty transcription")
+        if not self.groq_api_key:
+            print("⚠️ Groq API key not configured")
             return "", 0.0
             
         try:
+            # Decode base64 audio
             audio_bytes = base64.b64decode(audio_base64)
+            
+            # Save to temp file (Groq needs a file)
             tmp_dir = tempfile.gettempdir()
-            tmp_path = os.path.join(tmp_dir, f"whisper_audio_{os.getpid()}_{id(audio_bytes)}.wav")
+            tmp_path = os.path.join(tmp_dir, f"groq_audio_{os.getpid()}.wav")
             
             with open(tmp_path, 'wb') as f:
                 f.write(audio_bytes)
             
-            print(f"🎤 Transcribing {len(audio_bytes)} bytes of audio...")
+            print(f"🎤 Sending {len(audio_bytes)} bytes to Groq Whisper...")
             
-            # Optimized settings for accuracy
-            result = self.model.transcribe(
-                tmp_path,
-                language='en',
-                fp16=False,  # CPU compatibility
-                temperature=0.0,  # More deterministic
-                best_of=3,  # Try multiple decodings for better accuracy
-                beam_size=5  # Better beam search
-            )
-
-            text = result.get("text", "").strip()
-            confidence = 95.0  # Whisper is highly accurate
+            # Call Groq Whisper API
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                with open(tmp_path, 'rb') as audio_file:
+                    response = await client.post(
+                        "https://api.groq.com/openai/v1/audio/transcriptions",
+                        headers={
+                            "Authorization": f"Bearer {self.groq_api_key}"
+                        },
+                        files={
+                            "file": ("audio.wav", audio_file, "audio/wav")
+                        },
+                        data={
+                            "model": "whisper-large-v3",  # Best accuracy!
+                            "language": "en",
+                            "response_format": "json"
+                        }
+                    )
             
-            print(f"✅ Transcription: {text[:100]}...")
-
-            return text, confidence
+            if response.status_code == 200:
+                result = response.json()
+                text = result.get("text", "").strip()
+                confidence = 98.0  # Whisper large-v3 is extremely accurate
+                
+                print(f"✅ Groq transcription: {text[:100]}...")
+                return text, confidence
+            else:
+                print(f"❌ Groq API error: {response.status_code} - {response.text}")
+                return "", 0.0
             
         except Exception as e:
             print(f"❌ Transcription error: {e}")

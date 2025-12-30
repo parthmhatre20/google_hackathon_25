@@ -1076,16 +1076,39 @@
                 const currentQuestion = appState.currentQuestions[appState.currentQuestionIndex];
                 let transcription = '';
                 
-                // Use browser speech recognition (free, works on Render free tier)
-                console.log('🎤 Using browser speech recognition...');
-                updateProcessingStage('🎤 Processing your answer...');
+                // Use Groq Whisper API (best accuracy!)
+                console.log('🎤 Sending audio to Groq Whisper...');
+                updateProcessingStage('🎤 Transcribing your answer...');
                 
-                if (browserTranscript && browserTranscript.length > 5) {
-                    console.log('✅ Browser transcription:', browserTranscript);
+                try {
+                    const audioBase64 = await blobToBase64(audioBlob);
+                    const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            audio_base64: audioBase64.split(',')[1],
+                            question_id: currentQuestion.question_id
+                        })
+                    });
+                    
+                    if (transcribeResponse.ok) {
+                        const data = await transcribeResponse.json();
+                        if (data.transcription && data.transcription.trim().length > 3) {
+                            transcription = data.transcription;
+                            console.log('✅ Groq transcription:', transcription);
+                        }
+                    }
+                } catch (e) {
+                    console.log('⚠️ Groq failed:', e);
+                }
+                
+                // Fallback to browser transcript
+                if (!transcription && browserTranscript && browserTranscript.length > 5) {
+                    console.log('🔄 Using browser speech as fallback');
                     transcription = browserTranscript;
                 }
                 
-                // Fallback: ask user to type if browser didn't capture
+                // Final fallback: ask user to type
                 if (!transcription || transcription.trim().length < 3) {
                     const userInput = prompt(
                         '🎤 Could not detect speech clearly. Please type your answer:\n\n' +
