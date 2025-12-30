@@ -105,6 +105,10 @@
         [data-view="form"] #recording-bar {
             display: none;
         }
+        
+        [data-state="completed"] {
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-black text-zinc-400 min-h-screen flex items-center justify-center p-4 md:p-8">
@@ -326,7 +330,7 @@
                     <div id="chat-messages" class="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth pb-32" style="max-height: calc(100vh - 350px); overflow-y: auto;">
                     </div>
 
-                    <div id="recording-bar" data-state="idle" class="absolute bottom-0 left-0 right-0 p-8 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent">
+                    <div id="recording-bar" data-state="idle" class="absolute bottom-0 left-0 right-0 p-4 bg-zinc-950">
                         <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center gap-6 shadow-2xl relative overflow-hidden group">
                             
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none"></div>
