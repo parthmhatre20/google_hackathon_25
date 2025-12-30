@@ -100,28 +100,13 @@ class AIService:
                 # Analyze filler words
                 filler_analysis = self.count_filler_words(transcription)
                 
-                prompt = f"""You are a supportive AI interview coach helping candidates improve.
+                prompt = f"""Rate this interview answer. Be concise.
 
-Question: {question_text}
+Q: {question_text}
+A: {transcription}
 
-Candidate's Answer: {transcription}
-
-Provide concise, encouraging feedback in JSON format:
-{{
-  "overall_score": <number 0-100>,
-  "content_score": <number 0-100>,
-  "clarity_score": <number 0-100>,
-  "confidence_score": <number 0-100>,
-  "strengths": ["2-3 specific positives"],
-  "improvements": ["2-3 actionable suggestions"]
-}}
-
-Guidelines:
-- Be honest but encouraging
-- Scores: 40-60 for basic answers, 60-75 for good answers, 75-90 for excellent answers
-- Keep feedback SHORT (one sentence per point)
-- Focus on what to DO, not lengthy criticism
-- Sound like ChatGPT - helpful, clear, friendly"""
+JSON only:
+{{"overall_score":<0-100>,"content_score":<0-100>,"clarity_score":<0-100>,"confidence_score":<0-100>,"strengths":["point1","point2"],"improvements":["tip1","tip2"]}}"""
                 
                 response = self.client.models.generate_content(
                     model=self.model_name,

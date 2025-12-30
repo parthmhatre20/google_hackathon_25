@@ -935,6 +935,43 @@
             }
         };
 
+        // Web Speech API for fast browser-based transcription
+        let speechRecognition = null;
+        let finalTranscript = '';
+        
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.log('Web Speech API not supported, will use server transcription');
+                return null;
+            }
+            
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            
+            recognition.onresult = (event) => {
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + ' ';
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                // Show real-time transcription
+                const liveText = document.getElementById('live-transcript');
+                if (liveText) liveText.textContent = finalTranscript + interim;
+            };
+            
+            recognition.onerror = (event) => {
+                console.warn('Speech recognition error:', event.error);
+            };
+            
+            return recognition;
+        }
+
         window.startRecording = async function() {
             if (appState.isProcessing) {
                 alert('⏳ Please wait! Still processing your previous answer.');
@@ -943,18 +980,32 @@
             
             if (appState.isRecording) return;
             
+            finalTranscript = '';
+            
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 appState.mediaRecorder = new MediaRecorder(stream);
                 appState.audioChunks = [];
+                
+                // Start Web Speech API for real-time transcription
+                speechRecognition = initSpeechRecognition();
+                if (speechRecognition) {
+                    speechRecognition.start();
+                }
                 
                 appState.mediaRecorder.ondataavailable = (event) => {
                     appState.audioChunks.push(event.data);
                 };
                 
                 appState.mediaRecorder.onstop = async () => {
+                    // Stop speech recognition
+                    if (speechRecognition) {
+                        speechRecognition.stop();
+                    }
+                    
                     const audioBlob = new Blob(appState.audioChunks, { type: 'audio/wav' });
-                    await processAudio(audioBlob);
+                    // Pass the browser transcript to processAudio
+                    await processAudio(audioBlob, finalTranscript.trim());
                 };
                 
                 appState.mediaRecorder.start();
@@ -1001,7 +1052,7 @@
             }
         };
 
-        async function processAudio(audioBlob) {
+        async function processAudio(audioBlob, browserTranscript = '') {
             if (appState.isProcessing) return;
             
             appState.isProcessing = true;
@@ -1010,29 +1061,38 @@
             document.getElementById('recording-ui').classList.add('hidden');
             
             try {
-                const audioBase64 = await blobToBase64(audioBlob);
                 const currentQuestion = appState.currentQuestions[appState.currentQuestionIndex];
+                let transcription = browserTranscript;
                 
-                updateProcessingStage('🎤 Transcribing your answer...');
-                const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        audio_base64: audioBase64.split(',')[1],
-                        question_id: currentQuestion.question_id
-                    })
-                });
-                
-                if (!transcribeResponse.ok) {
-                    const error = await transcribeResponse.json();
-                    throw new Error(`Transcription failed: ${JSON.stringify(error)}`);
+                // Use browser transcript if available (instant!), otherwise fallback to server
+                if (transcription && transcription.length > 5) {
+                    console.log('✅ Using browser speech recognition (fast!)');
+                    updateProcessingStage('🎤 Got your answer!');
+                } else {
+                    // Fallback to server-side transcription
+                    console.log('🔄 Falling back to server transcription...');
+                    updateProcessingStage('🎤 Transcribing your answer...');
+                    const audioBase64 = await blobToBase64(audioBlob);
+                    const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            audio_base64: audioBase64.split(',')[1],
+                            question_id: currentQuestion.question_id
+                        })
+                    });
+                    
+                    if (!transcribeResponse.ok) {
+                        const error = await transcribeResponse.json();
+                        throw new Error(`Transcription failed: ${JSON.stringify(error)}`);
+                    }
+                    
+                    const transcriptionData = await transcribeResponse.json();
+                    transcription = transcriptionData.transcription;
                 }
                 
-                const transcriptionData = await transcribeResponse.json();
-                const transcription = transcriptionData.transcription;
-                
                 if (!transcription || transcription.trim().length === 0) {
-                    throw new Error('Transcription returned empty. Please speak clearly and try again.');
+                    throw new Error('Could not understand your answer. Please speak clearly and try again.');
                 }
                 
                 displayUserAnswer(transcription);

@@ -111,35 +111,16 @@ class QuestionGeneratorService:
         
         while attempt < max_retries:
             try:
-                # Build context from resume and previous answers
-                background_context = ""
-                if request.resume_text:
-                    background_context = f"Resume/Background: {request.resume_text}\n\n"
+                # Build context from resume
+                bg = f"Background: {request.resume_text[:500]}" if request.resume_text else ""
                 
-                prompt = f"""You are an expert technical interviewer for a {request.domain} position.
+                # Shorter prompt = faster response
+                prompt = f"""Generate 5 interview questions for {request.domain}. {bg}
 
-{background_context}Generate exactly 5 progressive interview questions.
+JSON only:
+{{"questions":[{{"question_text":"Q1","reasoning":"why"}},{{"question_text":"Q2","reasoning":"why"}},{{"question_text":"Q3","reasoning":"why"}},{{"question_text":"Q4","reasoning":"why"}},{{"question_text":"Q5","reasoning":"why"}}]}}
 
-Question Requirements:
-1. Start with: "Tell me about yourself..." (warm intro)
-2. Then 2-3 TECHNICAL questions specific to {request.domain}
-   - Ask about core concepts, technologies, algorithms
-   - Include scenario-based problem-solving
-   - Example: "How would you optimize..." or "Explain how X works..."
-3. Then 1-2 questions about real projects/experience
-4. Make questions adaptive - if resume mentions specific tech, ask about it
-
-JSON format:
-{{
-  "questions": [
-    {{
-      "question_text": "Question here?",
-      "reasoning": "Why this question matters"
-    }}
-  ]
-}}
-
-Tone: Sound like a real interviewer - direct, professional, curious."""
+Rules: Q1=intro, Q2-4=technical for {request.domain}, Q5=experience"""
 
                 response = self.client.models.generate_content(
                     model=self.model_name,
