@@ -48,11 +48,11 @@ async def api_health_check():
     """API health check"""
     return {"status": "healthy", "api": "active"}
 
-# Include API routers under /api prefix - MUST be before Flask mount
-app.include_router(interview_router, prefix="/api")
-app.include_router(user_router, prefix="/api")
-app.include_router(feedback_router, prefix="/api")
-app.include_router(test_firebase_router, prefix="/api")
+# Include API routers - they already have /api prefix in their definition
+app.include_router(interview_router)
+app.include_router(user_router)
+app.include_router(feedback_router)
+app.include_router(test_firebase_router)
 
 # Mount static files from Frontend
 app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
