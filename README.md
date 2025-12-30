@@ -28,8 +28,6 @@
 - [Deployment](#-deployment)
 - [Project Structure](#-project-structure)
 - [Team](#-team)
-- [License](#-license)
-
 ---
 
 ## 🎯 Overview
