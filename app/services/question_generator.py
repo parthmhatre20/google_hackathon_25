@@ -112,15 +112,23 @@ class QuestionGeneratorService:
         while attempt < max_retries:
             try:
                 # Build context from resume
-                bg = f"Background: {request.resume_text[:500]}" if request.resume_text else ""
+                bg = f"\nCandidate background: {request.resume_text[:500]}" if request.resume_text else ""
                 
-                # Shorter prompt = faster response
-                prompt = f"""Generate 5 interview questions for {request.domain}. {bg}
+                prompt = f"""Generate 5 interview questions for a {request.domain} position.{bg}
 
-JSON only:
-{{"questions":[{{"question_text":"Q1","reasoning":"why"}},{{"question_text":"Q2","reasoning":"why"}},{{"question_text":"Q3","reasoning":"why"}},{{"question_text":"Q4","reasoning":"why"}},{{"question_text":"Q5","reasoning":"why"}}]}}
+Requirements:
+1. Q1: Warm intro ("Tell me about yourself...")
+2. Q2-Q4: Technical questions specific to {request.domain} (concepts, problem-solving, real scenarios)
+3. Q5: Experience/projects question
 
-Rules: Q1=intro, Q2-4=technical for {request.domain}, Q5=experience"""
+Return JSON:
+{{
+  "questions": [
+    {{"question_text": "Your question here?", "reasoning": "Brief reason"}}
+  ]
+}}
+
+Make questions sound natural, like a real interviewer."""
 
                 response = self.client.models.generate_content(
                     model=self.model_name,
