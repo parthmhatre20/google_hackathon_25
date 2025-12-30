@@ -37,22 +37,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files from Frontend
-app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
+# Health check FIRST (before any mounts)
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render"""
+    return {"status": "healthy", "service": "ai-interview-coach"}
 
-# Include API routers under /api prefix
+@app.get("/api/health")
+async def api_health_check():
+    """API health check"""
+    return {"status": "healthy", "api": "active"}
+
+# Include API routers under /api prefix - MUST be before Flask mount
 app.include_router(interview_router, prefix="/api")
 app.include_router(user_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
 app.include_router(test_firebase_router, prefix="/api")
 
-# Mount Flask app for all other routes
-app.mount("/", WSGIMiddleware(flask_app))
+# Mount static files from Frontend
+app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Render"""
-    return {"status": "healthy", "service": "ai-interview-coach"}
+# Mount Flask app LAST - it catches everything else
+app.mount("/", WSGIMiddleware(flask_app))
 
 if __name__ == "__main__":
     import uvicorn
