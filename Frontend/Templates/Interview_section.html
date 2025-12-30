@@ -1074,39 +1074,40 @@
             
             try {
                 const currentQuestion = appState.currentQuestions[appState.currentQuestionIndex];
-                let transcription = browserTranscript;
+                let transcription = '';
                 
-                // Use browser transcript if available (instant!), otherwise fallback to server
-                if (transcription && transcription.length > 5) {
-                    console.log('✅ Using browser speech recognition (fast!)');
-                    updateProcessingStage('🎤 Got your answer!');
-                } else {
-                    // Fallback to server-side transcription
-                    console.log('🔄 Falling back to server transcription...');
-                    updateProcessingStage('🎤 Transcribing your answer...');
-                    const audioBase64 = await blobToBase64(audioBlob);
-                    const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            audio_base64: audioBase64.split(',')[1],
-                            question_id: currentQuestion.question_id
-                        })
-                    });
-                    
-                    if (!transcribeResponse.ok) {
-                        const error = await transcribeResponse.json();
-                        throw new Error(`Transcription failed: ${JSON.stringify(error)}`);
-                    }
-                    
+                // Always try server-side Whisper first (more accurate)
+                console.log('🎤 Sending audio to Whisper for transcription...');
+                updateProcessingStage('🎤 Transcribing your answer (this may take a few seconds)...');
+                
+                const audioBase64 = await blobToBase64(audioBlob);
+                const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audio_base64: audioBase64.split(',')[1],
+                        question_id: currentQuestion.question_id
+                    })
+                });
+                
+                if (transcribeResponse.ok) {
                     const transcriptionData = await transcribeResponse.json();
                     transcription = transcriptionData.transcription;
+                    console.log('✅ Whisper transcription:', transcription);
                 }
                 
-                if (!transcription || transcription.trim().length === 0) {
-                    // Show text input fallback
+                // Fallback to browser transcript if Whisper returned empty
+                if (!transcription || transcription.trim().length < 3) {
+                    if (browserTranscript && browserTranscript.length > 5) {
+                        console.log('🔄 Using browser speech recognition as fallback');
+                        transcription = browserTranscript;
+                    }
+                }
+                
+                // Final fallback: ask user to type
+                if (!transcription || transcription.trim().length < 3) {
                     const userInput = prompt(
-                        '🎤 Speech not detected. Please type your answer:\n\n' +
+                        '🎤 Could not detect speech. Please type your answer:\n\n' +
                         'Question: ' + currentQuestion.question_text
                     );
                     
@@ -1144,7 +1145,7 @@
                     question: currentQuestion.question_text,
                     transcription: transcription,
                     analysis: analysisData,
-                    confidence: transcriptionData.confidence
+                    confidence: 90  // Default confidence for browser speech recognition
                 });
                 
                 console.log(`✅ Question ${appState.currentQuestionIndex + 1} analyzed (score: ${analysisData.overall_score})`);

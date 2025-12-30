@@ -8,7 +8,7 @@ class SpeechService:
         self.model = None
         self.use_whisper = False
         
-        # Try to load Whisper (only works locally with enough RAM)
+        # Try to load Whisper
         try:
             import whisper
             import torch
@@ -16,19 +16,23 @@ class SpeechService:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             print(f"🎤 Whisper running on: {self.device}")
             
-            # Use tiny model for speed (or disable on low-memory systems)
-            self.model = whisper.load_model("tiny", device=self.device)
+            # Use 'base' model - best balance of speed and accuracy for hackathon
+            # tiny = fastest, less accurate
+            # base = good balance (recommended)
+            # small = more accurate, slower
+            self.model = whisper.load_model("base", device=self.device)
             self.use_whisper = True
-            print("✅ Whisper model loaded (tiny - fast mode)!")
-        except ImportError:
-            print("ℹ️  Whisper not installed - using browser speech recognition")
+            print("✅ Whisper model loaded (base - optimized for accuracy)!")
+        except ImportError as e:
+            print(f"⚠️ Whisper not installed: {e}")
+            print("   Install with: pip install openai-whisper torch")
         except Exception as e:
-            print(f"ℹ️  Whisper disabled: {e}")
-            print("   Browser speech recognition will be used instead")
+            print(f"⚠️ Whisper initialization failed: {e}")
 
     async def transcribe_audio(self, audio_base64: str):
         if not self.use_whisper or not self.model:
             # Return empty - browser will handle transcription
+            print("⚠️ Whisper not available, returning empty transcription")
             return "", 0.0
             
         try:
@@ -39,21 +43,27 @@ class SpeechService:
             with open(tmp_path, 'wb') as f:
                 f.write(audio_bytes)
             
-            # Fast transcription settings
+            print(f"🎤 Transcribing {len(audio_bytes)} bytes of audio...")
+            
+            # Optimized settings for accuracy
             result = self.model.transcribe(
                 tmp_path,
                 language='en',
-                fp16=False,
-                temperature=0.0
+                fp16=False,  # CPU compatibility
+                temperature=0.0,  # More deterministic
+                best_of=3,  # Try multiple decodings for better accuracy
+                beam_size=5  # Better beam search
             )
 
             text = result.get("text", "").strip()
-            confidence = 90.0
+            confidence = 95.0  # Whisper is highly accurate
+            
+            print(f"✅ Transcription: {text[:100]}...")
 
             return text, confidence
             
         except Exception as e:
-            print(f"Transcription error: {e}")
+            print(f"❌ Transcription error: {e}")
             return "", 0.0
         finally:
             try:
