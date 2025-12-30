@@ -14,7 +14,6 @@ from app.models import (
 )
 from app.services.speech_service import speech_service
 from app.services.ai_service import ai_service
-from app.services.firebase_service import firebase_service
 from app.services.tts_service import tts_service
 import base64
 
@@ -266,6 +265,67 @@ async def get_session_details(session_id: str):
         raise
     except Exception as e:
         print(f"Error fetching session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RenameSessionRequest(BaseModel):
+    new_name: str
+
+@router.put("/session/{session_id}/rename")
+async def rename_session(session_id: str, request: RenameSessionRequest):
+    """
+    Rename an interview session
+    """
+    try:
+        db = get_db()
+        
+        # Check if session exists
+        session_data = db.child("interview_sessions").child(session_id).get()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Update the domain/title
+        db.child("interview_sessions").child(session_id).update({
+            "domain": request.new_name
+        })
+        
+        return {"message": "Session renamed successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error renaming session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    """
+    Delete an interview session and all its answers
+    """
+    try:
+        db = get_db()
+        
+        # Get session to find user_id
+        session_data = db.child("interview_sessions").child(session_id).get()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        user_id = session_data.get("user_id")
+        
+        # Delete session from interview_sessions
+        db.child("interview_sessions").child(session_id).delete()
+        
+        # Remove session reference from user's sessions
+        if user_id:
+            db.child("users").child(user_id).child("sessions").child(session_id).delete()
+        
+        return {"message": "Session deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

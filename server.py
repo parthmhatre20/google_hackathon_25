@@ -16,7 +16,7 @@ from starlette.middleware.wsgi import WSGIMiddleware
 
 # Import FastAPI app components
 from app.config import settings
-from app.routes import interview_router, user_router, feedback_router, test_firebase_router
+from app.routes import interview_router, user_router
 
 # Import Flask app
 from Frontend.app import app as flask_app
@@ -51,8 +51,6 @@ async def api_health_check():
 # Include API routers - they already have /api prefix in their definition
 app.include_router(interview_router)
 app.include_router(user_router)
-app.include_router(feedback_router)
-app.include_router(test_firebase_router)
 
 # Mount static files from Frontend
 app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
