@@ -938,11 +938,12 @@
         // Web Speech API for fast browser-based transcription
         let speechRecognition = null;
         let finalTranscript = '';
+        let speechRecognitionActive = false;
         
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                console.log('Web Speech API not supported, will use server transcription');
+                console.log('⚠️ Web Speech API not supported');
                 return null;
             }
             
@@ -950,6 +951,12 @@
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-US';
+            recognition.maxAlternatives = 1;
+            
+            recognition.onstart = () => {
+                speechRecognitionActive = true;
+                console.log('🎤 Speech recognition started');
+            };
             
             recognition.onresult = (event) => {
                 let interim = '';
@@ -960,13 +967,18 @@
                         interim += event.results[i][0].transcript;
                     }
                 }
-                // Show real-time transcription
-                const liveText = document.getElementById('live-transcript');
-                if (liveText) liveText.textContent = finalTranscript + interim;
+                console.log('📝 Transcript:', finalTranscript + interim);
             };
             
             recognition.onerror = (event) => {
                 console.warn('Speech recognition error:', event.error);
+                speechRecognitionActive = false;
+                // Don't stop recording - let user finish and we'll prompt for text
+            };
+            
+            recognition.onend = () => {
+                speechRecognitionActive = false;
+                console.log('🛑 Speech recognition ended');
             };
             
             return recognition;
@@ -1092,7 +1104,17 @@
                 }
                 
                 if (!transcription || transcription.trim().length === 0) {
-                    throw new Error('Could not understand your answer. Please speak clearly and try again.');
+                    // Show text input fallback
+                    const userInput = prompt(
+                        '🎤 Speech not detected. Please type your answer:\n\n' +
+                        'Question: ' + currentQuestion.question_text
+                    );
+                    
+                    if (userInput && userInput.trim().length > 0) {
+                        transcription = userInput.trim();
+                    } else {
+                        throw new Error('No answer provided. Please try again.');
+                    }
                 }
                 
                 displayUserAnswer(transcription);
