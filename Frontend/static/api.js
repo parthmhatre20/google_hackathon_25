@@ -1,5 +1,7 @@
-// API Configuration
-const API_BASE_URL = 'http://localhost:8000/api';
+// API Configuration - Dynamic URL for localhost and production
+const API_BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000/api' 
+    : `${window.location.origin}/api`;
 
 // State management
 const appState = {

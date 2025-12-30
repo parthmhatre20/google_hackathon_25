@@ -1,0 +1,60 @@
+"""
+Combined FastAPI + Flask server for Render deployment
+Single service running both API and Frontend
+"""
+import os
+from dotenv import load_dotenv
+
+# Load environment variables FIRST
+load_dotenv()
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from starlette.middleware.wsgi import WSGIMiddleware
+
+# Import FastAPI app components
+from app.config import settings
+from app.routes import interview_router, user_router, feedback_router, test_firebase_router
+
+# Import Flask app
+from Frontend.app import app as flask_app
+
+# Create main FastAPI application
+app = FastAPI(
+    title="AI Interview Coach",
+    description="AI-powered interview practice platform",
+    version="1.0.0"
+)
+
+# Configure CORS - allow all origins for Render
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files from Frontend
+app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
+
+# Include API routers under /api prefix
+app.include_router(interview_router, prefix="/api")
+app.include_router(user_router, prefix="/api")
+app.include_router(feedback_router, prefix="/api")
+app.include_router(test_firebase_router, prefix="/api")
+
+# Mount Flask app for all other routes
+app.mount("/", WSGIMiddleware(flask_app))
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render"""
+    return {"status": "healthy", "service": "ai-interview-coach"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)

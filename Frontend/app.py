@@ -2,6 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from flask import Flask,render_template,request,redirect,url_for,session,jsonify
 import os
+import json
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -10,21 +11,41 @@ load_dotenv()
 app = Flask('__name__',template_folder='templates')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Initialize Firebase only if credentials file exists
+# Initialize Firebase only if not already initialized (combined server may init first)
 firebase_initialized = False
-firebase_cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'interviewflow-f23b4-firebase-adminsdk-fbsvc-8db576c916.json')
 
-if os.path.exists(firebase_cred_path):
-    try:
-        cred = credentials.Certificate(firebase_cred_path)
-        firebase_admin.initialize_app(cred)
-        firebase_initialized = True
-        print("✅ Firebase initialized successfully!")
-    except Exception as e:
-        print(f"⚠️  Firebase initialization failed: {e}")
+if not firebase_admin._apps:
+    cred = None
+    
+    # Option 1: JSON credentials from environment variable (for Render)
+    cred_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+    if cred_json:
+        try:
+            cred_dict = json.loads(cred_json)
+            cred = credentials.Certificate(cred_dict)
+            print("✅ Flask: Firebase credentials loaded from FIREBASE_CREDENTIALS_JSON")
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Flask: Failed to parse FIREBASE_CREDENTIALS_JSON: {e}")
+    
+    # Option 2: File path (for local development)
+    if not cred:
+        cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'interviewflow-f23b4-firebase-adminsdk-fbsvc-8db576c916.json')
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            print(f"✅ Flask: Firebase credentials loaded from file: {cred_path}")
+    
+    if cred:
+        try:
+            firebase_admin.initialize_app(cred)
+            firebase_initialized = True
+            print("✅ Flask: Firebase initialized successfully!")
+        except Exception as e:
+            print(f"⚠️  Flask: Firebase initialization failed: {e}")
+    else:
+        print("⚠️  Flask: Firebase credentials not found. Auth features will not work.")
 else:
-    print("⚠️  Firebase credentials not found. Auth features will not work.")
-    print(f"   Looking for: {firebase_cred_path}")
+    firebase_initialized = True
+    print("✅ Flask: Firebase already initialized")
 
 from functools import wraps
 
