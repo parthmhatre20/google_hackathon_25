@@ -287,6 +287,18 @@ google_hackathon_25/
         <sub><b>Ansh Koli</b></sub>
       </a>
     </td>
+    <td align="center">
+      <a href="https://github.com/rohan-sanjay-kadam">
+        <img src="https://github.com/rohan-sanjay-kadam.png" width="80px;" alt=""/><br />
+        <sub><b>Rohan Kadam</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/khalidj291">
+        <img src="https://github.com/khalidj291.png" width="80px;" alt=""/><br />
+        <sub><b>Khalid J</b></sub>
+      </a>
+    </td>
   </tr>
 </table>
 
