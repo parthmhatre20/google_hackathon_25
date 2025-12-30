@@ -349,7 +349,9 @@
             audioChunks: [],
             isRecording: false,
             scores: [],            processingStage: '',            timerInterval: null,
-            seconds: 0
+            seconds: 0,
+            sessionId: null,  // Firebase session ID
+            userId: 'test_user_' + Date.now()  // Generate unique user ID for testing
         };
 
         // Initialize Icons
@@ -442,6 +444,23 @@
             appState.resumeText = resumeText;
             
             try {
+                // Step 1: Create Firebase session
+                const sessionFormData = new FormData();
+                sessionFormData.append('user_id', appState.userId);
+                sessionFormData.append('domain', jobRole);
+                
+                const sessionResponse = await fetch(`${API_BASE_URL}/interview/start-session`, {
+                    method: 'POST',
+                    body: sessionFormData
+                });
+                
+                if (!sessionResponse.ok) throw new Error('Failed to create interview session');
+                
+                const sessionData = await sessionResponse.json();
+                appState.sessionId = sessionData.session_id;
+                console.log('✅ Interview session created:', appState.sessionId);
+                
+                // Step 2: Generate questions
                 const response = await fetch(`${API_BASE_URL}/interview/generate-questions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -480,6 +499,36 @@
             }
         });
 
+        // Audio playback function
+        async function playAudioFromBase64(audioBase64, format = 'mp3') {
+            try {
+                const audioBlob = base64ToBlob(audioBase64, `audio/${format}`);
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                
+                return new Promise((resolve, reject) => {
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl);
+                        resolve();
+                    };
+                    audio.onerror = reject;
+                    audio.play();
+                });
+            } catch (error) {
+                console.error('Audio playback error:', error);
+            }
+        }
+        
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
         async function extractTextFromFile(file) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -496,7 +545,7 @@
             });
         }
 
-        function displayQuestion(index) {
+        async function displayQuestion(index) {
             if (index >= appState.currentQuestions.length) {
                 showInterviewComplete();
                 return;
@@ -514,6 +563,7 @@
                         <div class="flex items-baseline gap-3">
                             <span class="text-zinc-100 font-medium text-lg">AI Interviewer</span>
                             <span class="text-zinc-600 text-sm">Just now</span>
+                            <span id="speaker-icon-${index}" class="text-emerald-400 text-xs">🔊 Speaking...</span>
                         </div>
                         <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm p-6 shadow-sm">
                             <p class="text-zinc-300 text-lg leading-relaxed">${question.question_text}</p>
@@ -526,6 +576,28 @@
             chatMessages.innerHTML += questionHTML;
             chatMessages.scrollTop = chatMessages.scrollHeight;
             lucide.createIcons();
+            
+            // Speak the question using TTS
+            try {
+                const speakResponse = await fetch(`${API_BASE_URL}/interview/question/speak`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        question_id: question.question_id,
+                        question_text: question.question_text
+                    })
+                });
+                
+                if (speakResponse.ok) {
+                    const audioData = await speakResponse.json();
+                    await playAudioFromBase64(audioData.audio_base64, audioData.audio_format);
+                }
+            } catch (error) {
+                console.warn('TTS failed (non-critical):', error);
+            } finally {
+                const speakerIcon = document.getElementById(`speaker-icon-${index}`);
+                if (speakerIcon) speakerIcon.remove();
+            }
         }
 
         window.handleMicClick = function() {
@@ -667,6 +739,26 @@
                 displayFeedback(analysisData);
                 
                 appState.scores.push(analysisData.overall_score);
+                
+                // Step 3: Save to Firebase (optional, won't block if fails)
+                if (appState.sessionId) {
+                    try {
+                        const saveFormData = new FormData();
+                        saveFormData.append('session_id', appState.sessionId);
+                        saveFormData.append('question_id', currentQuestion.question_id);
+                        saveFormData.append('question_text', currentQuestion.question_text);
+                        saveFormData.append('transcription', transcription);
+                        saveFormData.append('confidence', transcriptionData.confidence);
+                        
+                        await fetch(`${API_BASE_URL}/interview/save-answer`, {
+                            method: 'POST',
+                            body: saveFormData
+                        });
+                        console.log('✅ Answer saved to Firebase');
+                    } catch (saveError) {
+                        console.warn('⚠️ Firebase save failed (non-critical):', saveError);
+                    }
+                }
                 
                 // Move to next question after delay
                 setTimeout(() => {

@@ -32,7 +32,7 @@ window.loginWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     await sendTokenToBackend(result.user);
-    window.location.href = "/interview_section";
+    // Don't redirect here - sendTokenToBackend handles it
   } catch (err) {
     if (
       err.code === "auth/popup-closed-by-user" ||
@@ -47,7 +47,9 @@ window.signupWithGoogle = window.loginWithGoogle;
 
 /* ---------- EMAIL AUTH ---------- */
 
-window.loginWithEmail = async () => {
+window.loginWithEmail = async (event) => {
+  if (event) event.preventDefault();
+  
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
@@ -60,12 +62,15 @@ window.loginWithEmail = async () => {
   }
 };
 
-window.signupWithEmail = async () => {
+window.signupWithEmail = async (event) => {
+  if (event) event.preventDefault();
+  
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
   try {
-    await createUserWithEmailAndPassword(auth, email, password);
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await sendTokenToBackend(result.user);
     window.location.href = "/interview_section";
   } catch (err) {
     alert(err.message);
@@ -89,5 +94,8 @@ async function sendTokenToBackend(user) {
     body: JSON.stringify({ token })
   });
 
-  window.location.href = "/interview_section";
+  // Wait a bit for Firebase auth to persist, then redirect
+  setTimeout(() => {
+    window.location.href = "/interview_section";
+  }, 500);
 }

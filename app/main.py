@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load environment variables FIRST
+load_dotenv()
+
 from app.config import settings
-from app.routes import interview_router, feedback_router, test_firebase_router
+from app.routes import interview_router, user_router, feedback_router, test_firebase_router
 
 # Create FastAPI application
 app = FastAPI(
@@ -21,6 +26,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(interview_router)
+app.include_router(user_router)
 app.include_router(feedback_router)
 app.include_router(test_firebase_router)
 

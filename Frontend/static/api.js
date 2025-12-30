@@ -10,7 +10,8 @@ const appState = {
     resumeText: null,
     mediaRecorder: null,
     audioChunks: [],
-    isRecording: false
+    isRecording: false,
+    sessionId: null  // Firebase session ID
 };
 
 // ==================== Resume & Question Generation ====================
@@ -20,19 +21,24 @@ async function handleMockInterviewSubmit(event) {
     
     const jobRole = document.getElementById('job-role').value;
     const cvFile = document.getElementById('cv-upload').files[0];
+    const backgroundText = document.getElementById('background')?.value || '';
     
     if (!jobRole) {
         showNotification('Please select a job role', 'error');
         return;
     }
     
-    // Extract resume text
-    let resumeText = '';
+    // Build resume text from background + CV
+    let resumeText = backgroundText || '';
+    
     if (cvFile) {
-        resumeText = await extractTextFromFile(cvFile);
-    } else {
-        // If no CV, use job role as context
-        resumeText = `Applying for ${jobRole} position. General software engineering background.`;
+        const cvContent = await extractTextFromFile(cvFile);
+        resumeText = resumeText ? `${resumeText}\n\n${cvContent}` : cvContent;
+    }
+    
+    // If no background or CV, use minimal context
+    if (!resumeText) {
+        resumeText = `Applying for ${jobRole} position.`;
     }
     
     appState.domain = jobRole;
@@ -42,7 +48,23 @@ async function handleMockInterviewSubmit(event) {
     showNotification('Generating personalized questions...', 'info');
     
     try {
-        // Call your backend API
+        // Step 1: Create Firebase session
+        const sessionFormData = new FormData();
+        sessionFormData.append('user_id', appState.userId || 'user_' + Date.now());
+        sessionFormData.append('domain', jobRole);
+        
+        const sessionResponse = await fetch(`${API_BASE_URL}/interview/start-session`, {
+            method: 'POST',
+            body: sessionFormData
+        });
+        
+        if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json();
+            appState.sessionId = sessionData.session_id;
+            console.log('✅ Interview session created:', appState.sessionId);
+        }
+        
+        // Step 2: Generate questions
         const response = await fetch(`${API_BASE_URL}/interview/generate-questions`, {
             method: 'POST',
             headers: {
@@ -110,9 +132,40 @@ function getDefaultQuestions() {
     ];
 }
 
+// ==================== Audio Helper Functions ====================
+
+async function playAudioFromBase64(audioBase64, format = 'mp3') {
+    try {
+        const audioBlob = base64ToBlob(audioBase64, `audio/${format}`);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        return new Promise((resolve, reject) => {
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                resolve();
+            };
+            audio.onerror = reject;
+            audio.play();
+        });
+    } catch (error) {
+        console.error('Audio playback error:', error);
+    }
+}
+
+function base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+}
+
 // ==================== Question Display ====================
 
-function displayQuestion(index) {
+async function displayQuestion(index) {
     if (index >= appState.currentQuestions.length) {
         showInterviewComplete();
         return;
@@ -130,7 +183,10 @@ function displayQuestion(index) {
                 <i data-lucide="bot" class="w-5 h-5 text-indigo-400"></i>
             </div>
             <div class="flex-1">
-                <div class="text-sm text-zinc-500 mb-2">AI Interviewer</div>
+                <div class="text-sm text-zinc-500 mb-2">
+                    AI Interviewer
+                    <span id="speaker-icon-${index}" class="text-emerald-400 ml-2">🔊 Speaking...</span>
+                </div>
                 <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
                     <p class="text-zinc-200 leading-relaxed">${question.question_text}</p>
                     ${question.reasoning ? `<p class="text-xs text-zinc-500 mt-2">Focus: ${question.reasoning}</p>` : ''}
@@ -145,6 +201,28 @@ function displayQuestion(index) {
     // Re-initialize lucide icons
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
+    }
+    
+    // Speak the question using TTS
+    try {
+        const speakResponse = await fetch(`${API_BASE_URL}/interview/question/speak`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                question_id: question.question_id,
+                question_text: question.question_text
+            })
+        });
+        
+        if (speakResponse.ok) {
+            const audioData = await speakResponse.json();
+            await playAudioFromBase64(audioData.audio_base64, audioData.audio_format);
+        }
+    } catch (error) {
+        console.warn('TTS failed (non-critical):', error);
+    } finally {
+        const speakerIcon = document.getElementById(`speaker-icon-${index}`);
+        if (speakerIcon) speakerIcon.remove();
     }
 }
 
@@ -249,6 +327,26 @@ async function processAudio(audioBlob) {
         
         // Display feedback
         displayFeedback(analysisData);
+        
+        // Step 3: Save to Firebase (optional, won't block if fails)
+        if (appState.sessionId) {
+            try {
+                const saveFormData = new FormData();
+                saveFormData.append('session_id', appState.sessionId);
+                saveFormData.append('question_id', currentQuestion.question_id);
+                saveFormData.append('question_text', currentQuestion.question_text);
+                saveFormData.append('transcription', transcription);
+                saveFormData.append('confidence', transcriptionData.confidence || 0.0);
+                
+                await fetch(`${API_BASE_URL}/interview/save-answer`, {
+                    method: 'POST',
+                    body: saveFormData
+                });
+                console.log('✅ Answer saved to Firebase');
+            } catch (saveError) {
+                console.warn('⚠️ Firebase save failed (non-critical):', saveError);
+            }
+        }
         
         // Move to next question after a delay
         setTimeout(() => {

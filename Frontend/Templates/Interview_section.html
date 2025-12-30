@@ -1,14 +1,61 @@
-<html lang="en" class="dark"><head>
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mock Interview UI</title>
+    <title>AI Mock Interview</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
-    <script src="{{ url_for('static', filename='api.js') }}" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        // Same config as auth.js - MUST MATCH!
+        const firebaseConfig = {
+            apiKey: "AIzaSyD5ePko-KzkFKSo7Kfv01XeeCEHLRErquU",
+            authDomain: "interviewflow-f23b4.firebaseapp.com",
+            projectId: "interviewflow-f23b4",
+            storageBucket: "interviewflow-f23b4.firebasestorage.app",
+            messagingSenderId: "595080516204",
+            appId: "1:595080516204:web:0b9e5bdf27f4525729be49"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Make auth globally available
+        window.firebaseAuth = auth;
+
+        // Store user info when available (for Firebase operations)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.currentUser = user;
+                console.log('✅ Firebase user loaded:', user.email, user.uid);
+                // Trigger history load if function exists
+                if (typeof window.loadInterviewHistory === 'function') {
+                    window.loadInterviewHistory();
+                }
+            } else {
+                window.currentUser = null;
+                console.log('❌ No user logged in');
+            }
+        });
+
+        // Logout function
+        window.handleLogout = function() {
+            signOut(auth).then(() => {
+                window.location.href = '/logout';
+            }).catch((error) => {
+                console.error('Logout error:', error);
+            });
+        };
+    </script>
+    
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for a cleaner look */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
@@ -22,53 +69,46 @@
             50% { height: 100%; }
         }
 
-        /* Default (idle) */
-    [data-state="idle"] .cancel-btn,
-    [data-state="idle"] .listening,
-    [data-state="idle"] .stop-mic-btn,
-    [data-state="idle"] .avatar-listening-text,
-    [data-state="idle"] .AI-listening,
-    [data-state="idle"] .timer {
-        display: none;
-    }
+        [data-state="idle"] .cancel-btn,
+        [data-state="idle"] .listening,
+        [data-state="idle"] .stop-mic-btn,
+        [data-state="idle"] .avatar-listening-text,
+        [data-state="idle"] .AI-listening,
+        [data-state="idle"] .timer {
+            display: none;
+        }
 
-        /* Listening state */
-    [data-state="listening"] .speak-btn {
-        display: none;
-    }
-    
-    [data-state="listening"] .stop-mic-btn {
-        display: flex !important;
-    }
+        [data-state="listening"] .speak-btn {
+            display: none;
+        }
+        
+        [data-state="listening"] .stop-mic-btn {
+            display: flex !important;
+        }
 
-    [data-state="listening"] .timer {
-        display: block;
-    }
+        [data-state="listening"] .timer {
+            display: block;
+        }
 
-        /* Default */
-    .view-form,
-    .view-chat {
-        display: none;
-    }
+        .view-form,
+        .view-chat {
+            display: none;
+        }
 
-    /* Show form */
-    [data-view="form"] .view-form {
-        display: flex;
-    }
+        [data-view="form"] .view-form {
+            display: flex;
+        }
 
-    /* Show chat */
-    [data-view="chat"] .view-chat {
-        display: flex;
-    }
-    [data-view="form"] #recording-bar {
-        display: none;
-    }
+        [data-view="chat"] .view-chat {
+            display: flex;
+        }
+        [data-view="form"] #recording-bar {
+            display: none;
+        }
     </style>
-    
 </head>
 <body class="bg-black text-zinc-400 min-h-screen flex items-center justify-center p-4 md:p-8">
 
-    <!-- Main Application Container -->
     <div class="w-full max-w-[1200px] h-[700px] bg-zinc-950 border border-zinc-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden relative">
         
         <!-- Header -->
@@ -79,12 +119,12 @@
                     <span class="absolute top-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950"></span>
                 </div>
                 <div data-state="idle" id="timer">
-                    <h1 class="text-white text-lg font-medium tracking-tight leading-none mb-1">System Design Mock</h1>
+                    <h1 class="text-white text-lg font-medium tracking-tight leading-none mb-1">AI Mock Interview</h1>
                     <div class="timer flex items-center gap-2 text-sm text-zinc-500">
                         <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
                         <span>Live Recording</span>
                         <span>•</span>
-                        <span class="font-mono text-zinc-400">00:00 elapsed</span>
+                        <span class="font-mono text-zinc-400" id="timer-display">00:00 elapsed</span>
                     </div>
                 </div>
             </div>
@@ -97,9 +137,38 @@
                     </span>
                     <span class="AI-listening">AI Listening</span>
                 </div>
-                <button onclick="logout()" class="w-10 h-10 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 flex items-center justify-center transition-colors">
-                    <i data-lucide="log-out" class="w-4 h-4 fill-current"></i>
-                </button>
+                
+                <!-- Menu Button -->
+                <div class="relative">
+                    <button onclick="toggleMenu()" id="menu-button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg border border-zinc-700 transition-colors flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div id="dropdown-menu" class="hidden absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50">
+                        <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2 rounded-t-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                            Log Out
+                        </button>
+                        <button onclick="handleDeleteAccount()" class="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-950/50 transition-colors flex items-center gap-2 rounded-b-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                            Delete Account
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -109,10 +178,10 @@
             <!-- Left Sidebar -->
             <aside class="w-80 border-r border-zinc-800 flex flex-col bg-zinc-950/30 shrink-0">
                 
-                <!-- Mock Interview Section (New Request) -->
+                <!-- Mock Interview Section -->
                 <div class="p-5 border-b border-zinc-800/50">
                     <div class="text-xs font-medium text-zinc-500 mb-4 tracking-wider uppercase">New Session</div>
-                    <button class="w-full group relative flex flex-col items-start gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700 transition-all duration-200">
+                    <button onclick="resetInterview()" class="w-full group relative flex flex-col items-start gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700 transition-all duration-200">
                         <div class="flex items-center justify-between w-full">
                             <div class="flex items-center gap-3">
                                 <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
@@ -126,34 +195,18 @@
                     </button>
                 </div>
 
-                <!-- Past Sessions Section -->
+                <!-- Interview History -->
                 <div class="p-5 flex-1 overflow-y-auto">
-                    <div class="text-xs font-medium text-zinc-500 mb-4 tracking-wider uppercase">Past Sessions</div>
+                    <div class="text-xs font-medium text-zinc-500 mb-4 tracking-wider uppercase">Interview History</div>
                     
-                    <div class="space-y-1">
-                        <!-- Active Item -->
-                        <div class="group flex items-center justify-between p-3 rounded-lg bg-zinc-900 border border-zinc-800 cursor-pointer">
-                            <div class="flex items-center gap-3">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>
-                                <span class="text-zinc-100 font-medium text-base">Senior Backend</span>
-                            </div>
-                            <span class="px-2 py-0.5 rounded text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">A-</span>
-                        </div>
-
-                        <!-- Inactive Items -->
-                        <div class="group flex items-center justify-between p-3 rounded-lg hover:bg-zinc-900/50 hover:border-zinc-800 border border-transparent cursor-pointer transition-colors">
-                            <div class="flex items-center gap-3">
-                                <span class="w-2 h-2 rounded-full bg-zinc-700 group-hover:bg-zinc-600 transition-colors"></span>
-                                <span class="text-zinc-400 group-hover:text-zinc-300 font-medium text-base">Behavioral</span>
-                            </div>
-                        </div>
-
-                        <div class="group flex items-center justify-between p-3 rounded-lg hover:bg-zinc-900/50 hover:border-zinc-800 border border-transparent cursor-pointer transition-colors">
-                            <div class="flex items-center gap-3">
-                                <span class="w-2 h-2 rounded-full bg-zinc-700 group-hover:bg-zinc-600 transition-colors"></span>
-                                <span class="text-zinc-400 group-hover:text-zinc-300 font-medium text-base">Algorithm</span>
-                            </div>
-                        </div>
+                    <div id="history-container" class="space-y-2">
+                        <p class="text-sm text-zinc-500 text-center p-4">Your previous interviews will appear here</p>
+                    </div>
+                    
+                    <div class="mt-4 p-3 bg-zinc-900/30 border border-zinc-800 rounded-lg">
+                        <p class="text-xs text-zinc-500 leading-relaxed">
+                            🔒 Your interview data is automatically deleted after 7 days.
+                        </p>
                     </div>
                 </div>
             </aside>
@@ -164,17 +217,14 @@
                     <div class="flex-1 flex items-start justify-center p-8 py-12">
                     <div class="w-full max-w-lg mx-auto p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl">
                     <h2 class="text-white text-xl font-medium mb-6 tracking-tight">Start New Mock Interview</h2>
-                    <!-- Form -->
                     <form id="mock-form" class="space-y-6">
-                    <!-- Job Role - Combo box (select + searchable input) -->
+                    
                     <div class="space-y-2">
                     <label for="job-role" class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Job Role</label>
-        
                     <div class="relative">
                         <select 
                         id="job-role" 
                         class="w-full h-12 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-xl px-4 pr-10 appearance-none focus:outline-none focus:border-emerald-500/50 transition-colors"
-                        onchange="handleJobRoleSelect(this)"
                         >
                         <option value="" disabled selected>Select or type a role...</option>
                         <option value="Senior Backend Engineer">Senior Backend Engineer</option>
@@ -186,22 +236,12 @@
                         <option value="Staff Software Engineer">Staff Software Engineer</option>
                         <option value="Engineering Manager">Engineering Manager</option>
                         </select>
-                        
-                        <!-- Custom searchable input that appears when needed -->
-                        <input 
-                        type="text" 
-                        id="job-role-custom" 
-                        placeholder="Type custom role..." 
-                        class="hidden w-full h-12 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-xl px-4 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                        />
-                        
                         <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                         <i data-lucide="chevron-down" class="w-5 h-5 text-zinc-500"></i>
                         </div>
                     </div>
                     </div>
 
-                    <!-- About You / Background -->
                     <div class="space-y-2">
                     <label for="background" class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">About You (Recommended)</label>
                     <textarea 
@@ -213,10 +253,8 @@
                     <p class="text-xs text-zinc-500">💡 Example: "I know HTML, CSS, JavaScript, React. Built e-commerce site, weather app. Learning Next.js."</p>
                     </div>
 
-                    <!-- CV Upload -->
                     <div class="space-y-2">
                     <label class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Upload CV (Optional)</label>
-                    
                     <div class="relative group">
                         <label 
                         for="cv-upload" 
@@ -238,16 +276,12 @@
                             class="hidden"
                         />
                         </label>
-                        
-                        <!-- File name preview -->
                         <div id="file-name" class="hidden mt-2 text-sm text-zinc-400 truncate"></div>
                     </div>
                     </div>
 
-                    <!-- Difficulty Level -->
                     <div class="space-y-2">
                     <label class="block text-sm font-medium text-zinc-400 uppercase tracking-wider">Difficulty Level</label>
-                    
                     <div class="grid grid-cols-3 gap-3">
                         <label class="relative">
                         <input type="radio" name="difficulty" value="easy" class="peer sr-only" checked />
@@ -256,7 +290,6 @@
                             <span class="text-sm font-medium text-zinc-300">Easy</span>
                         </div>
                         </label>
-                        
                         <label class="relative">
                         <input type="radio" name="difficulty" value="medium" class="peer sr-only" />
                         <div class="flex flex-col items-center justify-center h-20 bg-zinc-900 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 peer-checked:border-emerald-500/50 peer-checked:bg-emerald-950/20 transition-all">
@@ -264,7 +297,6 @@
                             <span class="text-sm font-medium text-zinc-300">Medium</span>
                         </div>
                         </label>
-                        
                         <label class="relative">
                         <input type="radio" name="difficulty" value="hard" class="peer sr-only" />
                         <div class="flex flex-col items-center justify-center h-20 bg-zinc-900 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 peer-checked:border-emerald-500/50 peer-checked:bg-emerald-950/20 transition-all">
@@ -275,7 +307,6 @@
                     </div>
                     </div>
 
-                    <!-- Submit Button -->
                     <button 
                     id="start-interview-btn"
                     type="submit"
@@ -288,83 +319,32 @@
                     </form>
                     </div>
                     </div>
-
                 </section>
+                
                 <section class="view-chat">
                     <div class="flex-1 flex flex-col">
-                    <!-- Messages Container -->
-                    <div id="chat-messages" class="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth pb-32">
-                        
-                        <!-- AI Message -->
-                        <div class="flex gap-4 max-w-3xl">
-                            <div class="shrink-0">
-                                <div class="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium shadow-lg shadow-emerald-900/20">0</div>
-                            </div>
-                            <div class="flex flex-col gap-2">
-                                <div class="flex items-baseline gap-3">
-                                    <span class="text-zinc-100 font-medium text-lg">AI Interviewer</span>
-                                    <span class="text-zinc-600 text-sm">Just now</span>
-                                </div>
-                                <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm p-6 shadow-sm">
-                                    <p class="text-zinc-300 text-lg leading-relaxed">
-                                        How would you handle a sudden spike in traffic for the URL shortener we just discussed?
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- User Message -->
-                        <div class="flex flex-row-reverse gap-4 max-w-3xl ml-auto">
-                            <div class="shrink-0 relative group">
-                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" class="w-10 h-10 rounded-full border-2 border-zinc-800 bg-zinc-900">
-                            </div>
-                            <div class="flex flex-col gap-2 items-end w-full">
-                                <div data-state="idle" id="avatar-listening" class="flex items-baseline gap-3">
-                                    <span class="avatar-listening-text text-zinc-500 text-sm italic">Speaking...</span>
-                                    <span class="text-zinc-100 font-medium text-lg">You</span>
-                                </div>
-                                <!-- User Bubble -->
-                                <div class="bg-emerald-950/10 border border-emerald-500/20 rounded-2xl rounded-tr-sm p-6 w-full shadow-[0_0_15px_-3px_rgba(16,185,129,0.1)]">
-                                    <p class="text-zinc-200 text-lg leading-relaxed text-right">
-                                        I would implement a caching layer like Redis to handle read-heavy spikes, and scale the load balancers horizontally.
-                                    </p>
-                                </div>
-
-                                <!-- Feedback Pill -->
-                                <div class="flex items-center gap-2 px-4 py-2 bg-emerald-900/20 border border-emerald-500/20 rounded-full mt-1">
-                                    <i data-lucide="arrow-down" class="w-4 h-4 text-emerald-500"></i>
-                                    <span class="text-emerald-400 text-sm font-medium">Great mention of Redis. Consider consistency trade-offs.</span>
-                                </div>
-                            </div>
-                        </div>
-
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth pb-32" style="max-height: calc(100vh - 350px); overflow-y: auto;">
                     </div>
 
-                <!-- Bottom Input/Recording Bar -->
                     <div id="recording-bar" data-state="idle" class="absolute bottom-0 left-0 right-0 p-8 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent">
                         <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center gap-6 shadow-2xl relative overflow-hidden group">
                             
-                            <!-- Glow effect -->
                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none"></div>
 
-                            <!-- Processing Indicator -->
                             <div id="processing-indicator" class="hidden flex-1 flex items-center gap-4">
                                 <div class="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20 animate-pulse">
                                     <i data-lucide="loader-2" class="w-5 h-5 text-indigo-500 animate-spin"></i>
                                 </div>
                                 <div class="flex flex-col gap-1">
                                     <span id="processing-stage" class="text-indigo-400 text-lg font-light">Processing your answer...</span>
-                                    <span class="text-indigo-600 text-sm">Please wait, do not record again</span>
+                                    <span class="text-indigo-600 text-sm">Please wait</span>
                                 </div>
                             </div>
 
-                            <!-- Recording UI -->
                             <div id="recording-ui" class="flex-1 flex items-center gap-6">
-                                <!-- Text & Visualization -->
                                 <div class="listening flex-1 flex items-center gap-4 min-w-0">
                                     <span id="recording-text" class="text-zinc-400 text-lg truncate font-light">Listening to your answer...</span>
                                     
-                                    <!-- Audio Wave Visualization -->
                                     <div class="flex items-center gap-1 h-6">
                                         <div class="w-1 bg-emerald-500/50 rounded-full wave-bar" style="animation-delay: 0.1s; height: 40%"></div>
                                         <div class="w-1 bg-emerald-500/70 rounded-full wave-bar" style="animation-delay: 0.2s; height: 70%"></div>
@@ -374,19 +354,16 @@
                                     </div>
                                 </div>
 
-                                <!-- Cancel Button (when recording) -->
                                 <button onclick="cancelRecording()" class="cancel-btn px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-sm font-medium rounded-lg border border-zinc-700 transition-colors shadow-sm flex items-center gap-2">
                                     <i data-lucide="x" class="w-4 h-4"></i>
                                     <span>Cancel</span>
                                 </button>
 
-                                <!-- Start Recording Button (when idle) -->
                                 <button onclick="startRecording()" class="w-full speak-btn px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-base font-medium rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
                                     <i data-lucide="mic" class="w-5 h-5"></i>
                                     <span>Start Recording</span>
                                 </button>
                                 
-                                <!-- STOP Button (when recording) - Replaces mic button -->
                                 <button onclick="handleMicClick()" class="stop-mic-btn hidden px-8 py-3 bg-red-600 hover:bg-red-500 text-white text-base font-bold rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
                                     <div class="w-4 h-4 bg-white rounded-sm"></div>
                                     <span>STOP</span>
@@ -400,169 +377,935 @@
         </div>
     </div>
 
-    <!-- Init Icons -->
     <script type="module">
-    document.addEventListener("DOMContentLoaded", () => {
+        const API_BASE_URL = 'http://localhost:8000/api';
+
+        const appState = {
+            currentQuestions: [],
+            currentQuestionIndex: 0,
+            domain: null,
+            resumeText: null,
+            mediaRecorder: null,
+            audioChunks: [],
+            isRecording: false,
+            scores: [],
+            feedbackData: [], // Store all feedback until the end
+            processingStage: '',
+            timerInterval: null,
+            seconds: 0,
+            sessionId: null,
+            get userId() {
+                return window.currentUser?.uid || null;
+            }
+        };
 
         lucide.createIcons();
 
-        // -------- Core elements --------
-        const bar = document.getElementById("recording-bar")
-        const avatar_listening = document.getElementById("avatar-listening")
-        const AI_listening = document.getElementById("AI-listening")
-        const timer = document.getElementById("timer")
-        const timerEl = timer?.querySelector(".timer")
+        // Load interview history when page loads
+        window.loadInterviewHistory = async function() {
+            const userId = window.currentUser?.uid;
+            console.log('📊 Loading history for user:', userId);
+            if (!userId) {
+                console.log('❌ No user ID, skipping history load');
+                return;
+            }
 
-        let seconds = 0
-        let timerInterval = null
+            try {
+                const url = `${API_BASE_URL}/interview/history?user_id=${userId}`;
+                console.log('🔍 Fetching history from:', url);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    console.error('❌ History fetch failed:', response.status, response.statusText);
+                    throw new Error('Failed to fetch history');
+                }
 
-        // -------- Utils --------
-        function formatTime(sec) {
-            const m = String(Math.floor(sec / 60)).padStart(2, '0')
-            const s = String(sec % 60).padStart(2, '0')
-            return `${m}:${s}`
-        }
+                const data = await response.json();
+                console.log('✅ History data received:', data);
+                const historyContainer = document.getElementById('history-container');
 
-        // -------- Recording Logic --------
-        function startListening() {
-            bar.dataset.state = "listening"
-            avatar_listening.dataset.state = "listening"
-            AI_listening.dataset.state = "listening"
-            timer.dataset.state = "listening"
+                if (data.sessions && data.sessions.length > 0) {
+                    console.log(`📝 Displaying ${data.sessions.length} sessions`);
+                    historyContainer.innerHTML = data.sessions.map(session => {
+                        // Append 'Z' if not present to indicate UTC time
+                        const createdAt = session.created_at.endsWith('Z') ? session.created_at : session.created_at + 'Z';
+                        const date = new Date(createdAt);
+                        const timeAgo = getTimeAgo(date);
+                        
+                        return `
+                            <div onclick="viewInterviewSession('${session.session_id}')" class="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg hover:bg-zinc-900 hover:border-zinc-700 transition-colors cursor-pointer">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <div class="text-sm font-medium text-zinc-200">${session.domain}</div>
+                                        <div class="text-xs text-zinc-500 mt-1">${timeAgo}</div>
+                                    </div>
+                                    <div class="flex flex-col items-end gap-1">
+                                        <div class="text-xs text-zinc-600">${session.questions_answered}Q</div>
+                                        ${session.status === 'completed' ? '<span class="text-[10px] text-emerald-500">✓</span>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    console.log('📭 No sessions found');
+                    historyContainer.innerHTML = '<p class="text-sm text-zinc-500 text-center p-4">No interviews yet</p>';
+                }
 
-            if (timerInterval) return
-
-            seconds = 0
-            timerEl.textContent = "00:00"
-
-            timerInterval = setInterval(() => {
-            seconds++
-            timerEl.textContent = formatTime(seconds)
-            }, 1000)
-        }
-
-        function stopListening() {
-            bar.dataset.state = "idle"
-            avatar_listening.dataset.state = "idle"
-            AI_listening.dataset.state = "idle"
-            timer.dataset.state = "idle"
-
-            clearInterval(timerInterval)
-            timerInterval = null
-        }
-
-        // Make functions accessible to inline HTML onclick
-        window.startListening = startListening
-        window.stopListening = stopListening
-        
-        // -------- New recording functions from test page --------
-        window.handleMicClick = function() {
-            stopListening()
-            window.stopRecording?.()
-        }
-        
-        window.cancelRecording = function() {
-            stopListening()
-            // Silent cancel - no notification
-        }
-        
-        window.startRecording = function() {
-            startListening()
-            // Actual recording logic handled by api.js
-        }
-        
-        window.updateProcessingStage = function(message) {
-            const stageElement = document.getElementById('processing-stage')
-            if (stageElement) {
-                stageElement.textContent = message
+                lucide.createIcons();
+            } catch (error) {
+                console.error('💥 Error loading history:', error);
+                document.getElementById('history-container').innerHTML = '<p class="text-sm text-zinc-500 text-center p-4">Your previous interviews will appear here</p>';
             }
         }
 
-        // -------- Form Logic --------
-        function handleJobRoleSelect(select) {
-            const customInput = document.getElementById('job-role-custom')
-            if (!customInput) return
-
-            if (
-            select.value === '' ||
-            !Array.from(select.options).some(opt => opt.value === select.value)
-            ) {
-            customInput.classList.remove('hidden')
-            customInput.focus()
-            } else {
-            customInput.classList.add('hidden')
+        // View old interview session (read-only)
+        window.viewInterviewSession = async function(sessionId) {
+            console.log('📖 Viewing session:', sessionId);
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/interview/session/${sessionId}`);
+                if (!response.ok) throw new Error('Failed to load session');
+                
+                const session = await response.json();
+                console.log('Session data:', session);
+                
+                // Fix UTC timestamp
+                const createdAt = session.created_at.endsWith('Z') ? session.created_at : session.created_at + 'Z';
+                
+                // Create modal HTML
+                const modalHTML = `
+                    <div id="session-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onclick="if(event.target.id === 'session-modal') closeSessionModal()">
+                        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+                            <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                                <div>
+                                    <h2 class="text-lg font-semibold text-zinc-100">${session.domain}</h2>
+                                    <p class="text-xs text-zinc-500">${new Date(createdAt).toLocaleString()} • ${session.answers.length} questions</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    ${session.average_score ? `<span class="text-emerald-400 font-bold">${session.average_score}/100</span>` : ''}
+                                    <button onclick="closeSessionModal()" class="text-zinc-400 hover:text-zinc-200 p-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                                ${session.answers.map((a, i) => `
+                                    <div class="bg-zinc-800/50 rounded-xl p-4 space-y-3">
+                                        <div class="flex items-start gap-3">
+                                            <div class="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-medium shrink-0">${i + 1}</div>
+                                            <p class="text-zinc-200 text-sm font-medium">${a.question_text}</p>
+                                        </div>
+                                        <div class="ml-9 p-3 bg-zinc-900/50 rounded-lg border border-zinc-700">
+                                            <p class="text-zinc-300 text-sm">${a.transcription || 'No answer recorded'}</p>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                                ${session.answers.length === 0 ? '<p class="text-zinc-500 text-center py-8">No answers recorded</p>' : ''}
+                            </div>
+                            <div class="p-4 border-t border-zinc-800 text-center">
+                                <span class="text-xs text-zinc-600">Read-only view</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                
+            } catch (error) {
+                console.error('Error loading session:', error);
+                alert('Failed to load interview. Please try again.');
             }
         }
 
-        window.handleJobRoleSelect = handleJobRoleSelect
+        window.closeSessionModal = function() {
+            const modal = document.getElementById('session-modal');
+            if (modal) modal.remove();
+        }
 
-        // -------- File upload preview --------
-        const cvUpload = document.getElementById('cv-upload')
-        const fileNameDiv = document.getElementById('file-name')
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            
+            if (seconds < 60) return 'Just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+            return date.toLocaleDateString();
+        }
+
+        // Load history when Firebase auth is ready
+        let authCheckAttempts = 0;
+        const authCheckInterval = setInterval(() => {
+            authCheckAttempts++;
+            console.log(`🔄 Auth check attempt ${authCheckAttempts}, currentUser:`, window.currentUser?.email || 'not loaded');
+            
+            if (window.currentUser) {
+                console.log('✅ User authenticated, loading history');
+                clearInterval(authCheckInterval);
+                window.loadInterviewHistory();
+            } else if (authCheckAttempts > 20) {
+                console.warn('⚠️ Auth timeout after 10 seconds');
+                clearInterval(authCheckInterval);
+            }
+        }, 500);
+
+        // Toggle menu dropdown
+        window.toggleMenu = function() {
+            const menu = document.getElementById('dropdown-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('dropdown-menu');
+            const button = document.getElementById('menu-button');
+            if (menu && button && !menu.contains(e.target) && !button.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Handle logout
+        window.handleLogout = async function() {
+            if (!confirm('Are you sure you want to log out?')) return;
+            
+            try {
+                // Sign out from Firebase
+                const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+                const auth = getAuth();
+                await signOut(auth);
+                
+                // Clear Flask session
+                await fetch('/logout', { method: 'POST' });
+                
+                // Redirect to login
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Logout error:', error);
+                alert('Failed to log out. Please try again.');
+            }
+        }
+
+        // Handle delete account
+        window.handleDeleteAccount = async function() {
+            console.log('🗑️ Delete account clicked');
+            
+            const confirmation = prompt('⚠️ WARNING: This will permanently delete your account and all interview history.\n\nType "DELETE" to confirm:');
+            
+            if (confirmation !== 'DELETE') {
+                if (confirmation !== null) {
+                    alert('Account deletion cancelled. You must type "DELETE" exactly.');
+                }
+                return;
+            }
+
+            try {
+                const userId = window.currentUser?.uid;
+                console.log('User ID for deletion:', userId);
+                
+                if (!userId) {
+                    alert('User not authenticated. Please refresh the page and try again.');
+                    return;
+                }
+
+                // Re-authenticate user (required by Firebase for sensitive operations)
+                const { getAuth, reauthenticateWithPopup, GoogleAuthProvider, EmailAuthProvider, reauthenticateWithCredential } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+                const auth = getAuth();
+                const user = auth.currentUser;
+
+                if (!user) {
+                    alert('Session expired. Please log in again.');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                // Check the provider and re-authenticate accordingly
+                const providerId = user.providerData[0]?.providerId;
+                console.log('🔐 Re-authenticating with provider:', providerId);
+
+                try {
+                    if (providerId === 'google.com') {
+                        // Re-authenticate with Google
+                        const provider = new GoogleAuthProvider();
+                        await reauthenticateWithPopup(user, provider);
+                        console.log('✅ Re-authenticated with Google');
+                    } else if (providerId === 'password') {
+                        // Re-authenticate with email/password
+                        const password = prompt('Please enter your password to confirm account deletion:');
+                        if (!password) {
+                            alert('Password required to delete account.');
+                            return;
+                        }
+                        const credential = EmailAuthProvider.credential(user.email, password);
+                        await reauthenticateWithCredential(user, credential);
+                        console.log('✅ Re-authenticated with email/password');
+                    } else {
+                        // Unknown provider - try Google popup as fallback
+                        console.log('Unknown provider, trying Google:', providerId);
+                        const provider = new GoogleAuthProvider();
+                        await reauthenticateWithPopup(user, provider);
+                    }
+                } catch (reauthError) {
+                    console.error('Re-auth failed:', reauthError.code, reauthError.message);
+                    if (reauthError.code === 'auth/popup-closed-by-user') {
+                        alert('Re-authentication cancelled. Account not deleted.');
+                        return;
+                    }
+                    if (reauthError.code === 'auth/user-mismatch') {
+                        alert('Please sign in with the same account you used to create this account.');
+                        return;
+                    }
+                    // Show actual error for debugging
+                    alert('Re-authentication failed: ' + reauthError.message + '\n\nTry logging out and back in, then delete immediately.');
+                    return;
+                }
+
+                console.log('🔄 Deleting account data from database...');
+                // Delete all interview data from Firebase Database
+                const response = await fetch(`${API_BASE_URL}/user/delete-account`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('❌ Delete data failed:', errorData);
+                    // Continue anyway to delete auth account
+                }
+
+                console.log('✅ Account data deleted from database');
+                console.log('🔄 Deleting Firebase Auth account...');
+
+                // Delete Firebase Auth account
+                const { deleteUser } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+                await deleteUser(user);
+                console.log('✅ Firebase Auth account deleted');
+
+                alert('✅ Account deleted successfully');
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('💥 Delete account error:', error);
+                alert('Failed to delete account: ' + error.message);
+            }
+        }
+
+        function startTimer() {
+            appState.seconds = 0;
+            const timerDisplay = document.getElementById('timer-display');
+            appState.timerInterval = setInterval(() => {
+                appState.seconds++;
+                const mins = String(Math.floor(appState.seconds / 60)).padStart(2, '0');
+                const secs = String(appState.seconds % 60).padStart(2, '0');
+                timerDisplay.textContent = `${mins}:${secs} elapsed`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (appState.timerInterval) {
+                clearInterval(appState.timerInterval);
+                appState.timerInterval = null;
+            }
+        }
+
+        const cvUpload = document.getElementById('cv-upload');
+        const fileNameDiv = document.getElementById('file-name');
 
         cvUpload?.addEventListener('change', function () {
             if (this.files.length > 0) {
-            fileNameDiv.textContent = this.files[0].name
-            fileNameDiv.classList.remove('hidden')
+                fileNameDiv.textContent = this.files[0].name;
+                fileNameDiv.classList.remove('hidden');
             } else {
-            fileNameDiv.classList.add('hidden')
+                fileNameDiv.classList.add('hidden');
             }
-        })
+        });
 
-        // -------- View switching --------
-        const mainView = document.getElementById("main-view")
-        const mockForm = document.getElementById("mock-form")
-        const startMockBtn = document.querySelector(
-            "button:has(i[data-lucide='plus'])"
-        )
+        window.resetInterview = function() {
+            document.getElementById('main-view').dataset.view = 'form';
+            document.getElementById('chat-messages').innerHTML = '';
+            appState.currentQuestionIndex = 0;
+            appState.scores = [];
+        };
 
-        startMockBtn?.addEventListener("click", () => {
-            mainView.dataset.view = "form"
-        })
-
-        mockForm?.addEventListener("submit", (e) => {
-            e.preventDefault()
+        const mockForm = document.getElementById('mock-form');
+        mockForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
             
-            // Disable button to prevent double clicks
-            const startBtn = document.getElementById('start-interview-btn')
-            const btnText = document.getElementById('start-btn-text')
-            if (startBtn && !startBtn.disabled) {
-                startBtn.disabled = true
-                if (btnText) btnText.textContent = 'Starting...'
+            const startBtn = document.getElementById('start-interview-btn');
+            const btnText = document.getElementById('start-btn-text');
+            if (startBtn.disabled) return;
+            
+            startBtn.disabled = true;
+            btnText.textContent = 'Starting...';
+            
+            const jobRole = document.getElementById('job-role').value;
+            const cvFile = document.getElementById('cv-upload').files[0];
+            const backgroundText = document.getElementById('background').value.trim();
+            
+            if (!jobRole) {
+                alert('⚠️ Please select a job role');
+                startBtn.disabled = false;
+                btnText.textContent = 'Start Interview';
+                return;
+            }
+            
+            let resumeText = backgroundText || '';
+            
+            if (cvFile) {
+                const cvContent = await extractTextFromFile(cvFile);
+                resumeText = resumeText ? `${resumeText}\n\n${cvContent}` : cvContent;
+            }
+            
+            if (!resumeText) {
+                resumeText = `Applying for ${jobRole} position.`;
+            }
+            
+            // Get user ID - wait if not loaded yet
+            let userId = window.currentUser?.uid;
+            if (!userId) {
+                // Try to wait for auth to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                userId = window.currentUser?.uid;
+            }
+            
+            if (!userId) {
+                alert('⚠️ Not authenticated. Please refresh the page and try again.');
+                startBtn.disabled = false;
+                btnText.textContent = 'Start Interview';
+                return;
+            }
+            
+            appState.domain = jobRole;
+            appState.resumeText = resumeText;
+            
+            console.log('👤 Starting interview with userId:', userId);
+            
+            try {
+                const sessionFormData = new FormData();
+                sessionFormData.append('user_id', userId);
+                sessionFormData.append('domain', jobRole);
                 
-                // Re-enable after switching view
-                setTimeout(() => {
-                    startBtn.disabled = false
-                    if (btnText) btnText.textContent = 'Start Interview'
-                }, 1000)
+                const sessionResponse = await fetch(`${API_BASE_URL}/interview/start-session`, {
+                    method: 'POST',
+                    body: sessionFormData
+                });
+                
+                if (!sessionResponse.ok) throw new Error('Failed to create interview session');
+                
+                const sessionData = await sessionResponse.json();
+                appState.sessionId = sessionData.session_id;
+                console.log('✅ Interview session created:', appState.sessionId);
+                
+                const response = await fetch(`${API_BASE_URL}/interview/generate-questions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        resume_text: resumeText,
+                        domain: jobRole,
+                        num_questions: 5
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to generate questions');
+                
+                const data = await response.json();
+                appState.currentQuestions = data.questions;
+                appState.currentQuestionIndex = 0;
+                appState.scores = [];
+                
+                document.getElementById('main-view').dataset.view = 'chat';
+                displayQuestion(0);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                startBtn.disabled = false;
+                btnText.textContent = 'Start Interview';
+            }
+        });
+
+        async function playAudioFromBase64(audioBase64, format = 'mp3') {
+            try {
+                const audioBlob = base64ToBlob(audioBase64, `audio/${format}`);
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                
+                return new Promise((resolve, reject) => {
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl);
+                        resolve();
+                    };
+                    audio.onerror = reject;
+                    audio.play();
+                });
+            } catch (error) {
+                console.error('Audio playback error:', error);
+            }
+        }
+        
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        async function extractTextFromFile(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    resolve(e.target.result || `Professional experience. CV: ${file.name}`);
+                };
+                reader.onerror = () => resolve('Software engineering experience.');
+                
+                if (file.type === 'text/plain') {
+                    reader.readAsText(file);
+                } else {
+                    resolve(`Professional experience in software development. CV: ${file.name}`);
+                }
+            });
+        }
+
+        async function displayQuestion(index) {
+            if (index >= appState.currentQuestions.length) {
+                showInterviewComplete();
+                return;
             }
             
-            // Get background text for personalized questions
-            const backgroundText = document.getElementById('background')?.value || ''
-            console.log('User background:', backgroundText)
+            const question = appState.currentQuestions[index];
+            const chatMessages = document.getElementById('chat-messages');
             
-            mainView.dataset.view = "chat"
-            bar.dataset.state = "idle"
-        })
+            const questionHTML = `
+                <div class="flex gap-4 max-w-3xl">
+                    <div class="shrink-0">
+                        <div class="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium shadow-lg shadow-emerald-900/20">${index + 1}</div>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <div class="flex items-baseline gap-3">
+                            <span class="text-zinc-100 font-medium text-lg">AI Interviewer</span>
+                            <span class="text-zinc-600 text-sm">Just now</span>
+                            <span id="speaker-icon-${index}" class="text-emerald-400 text-xs">🔊 Speaking...</span>
+                        </div>
+                        <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm p-6 shadow-sm">
+                            <p class="text-zinc-300 text-lg leading-relaxed">${question.question_text}</p>
+                            ${question.reasoning ? `<p class="text-xs text-zinc-500 mt-2">💡 ${question.reasoning}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            chatMessages.innerHTML += questionHTML;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            lucide.createIcons();
+            
+            try {
+                const speakResponse = await fetch(`${API_BASE_URL}/interview/question/speak`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        question_id: question.question_id,
+                        question_text: question.question_text
+                    })
+                });
+                
+                if (speakResponse.ok) {
+                    const audioData = await speakResponse.json();
+                    await playAudioFromBase64(audioData.audio_base64, audioData.audio_format);
+                }
+            } catch (error) {
+                console.warn('TTS failed (non-critical):', error);
+            } finally {
+                const speakerIcon = document.getElementById(`speaker-icon-${index}`);
+                if (speakerIcon) speakerIcon.remove();
+            }
+        }
 
-    })
-      import { getAuth, onAuthStateChanged } from
-    "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        window.handleMicClick = function() {
+            if (appState.isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        };
 
-  const auth = getAuth();
+        window.startRecording = async function() {
+            if (appState.isProcessing) {
+                alert('⏳ Please wait! Still processing your previous answer.');
+                return;
+            }
+            
+            if (appState.isRecording) return;
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                appState.mediaRecorder = new MediaRecorder(stream);
+                appState.audioChunks = [];
+                
+                appState.mediaRecorder.ondataavailable = (event) => {
+                    appState.audioChunks.push(event.data);
+                };
+                
+                appState.mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(appState.audioChunks, { type: 'audio/wav' });
+                    await processAudio(audioBlob);
+                };
+                
+                appState.mediaRecorder.start();
+                appState.isRecording = true;
+                
+                document.getElementById('recording-bar').dataset.state = 'listening';
+                document.getElementById('AI-listening').dataset.state = 'listening';
+                document.getElementById('timer').dataset.state = 'listening';
+                startTimer();
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please grant permission.');
+            }
+        };
 
-  onAuthStateChanged(auth, (user) => {
-    if (!user) {
-      window.location.href = "/login";
-    }
-  });
+        window.stopRecording = function() {
+            if (appState.mediaRecorder && appState.isRecording) {
+                appState.mediaRecorder.stop();
+                appState.isRecording = false;
+                
+                document.getElementById('recording-bar').dataset.state = 'idle';
+                document.getElementById('AI-listening').dataset.state = 'idle';
+                document.getElementById('timer').dataset.state = 'idle';
+                stopTimer();
+                
+                appState.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        };
+        
+        window.cancelRecording = function() {
+            if (appState.mediaRecorder && appState.isRecording) {
+                appState.mediaRecorder.onstop = null;
+                appState.mediaRecorder.stop();
+                appState.isRecording = false;
+                appState.audioChunks = [];
+                
+                document.getElementById('recording-bar').dataset.state = 'idle';
+                document.getElementById('AI-listening').dataset.state = 'idle';
+                document.getElementById('timer').dataset.state = 'idle';
+                stopTimer();
+                
+                appState.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        };
 
-  window.logout = async function () {
-    await signOut(auth);
-    await fetch("/logout");
-    window.location.href = "/login";
-  };
-</script>
+        async function processAudio(audioBlob) {
+            if (appState.isProcessing) return;
+            
+            appState.isProcessing = true;
+            
+            document.getElementById('processing-indicator').classList.remove('hidden');
+            document.getElementById('recording-ui').classList.add('hidden');
+            
+            try {
+                const audioBase64 = await blobToBase64(audioBlob);
+                const currentQuestion = appState.currentQuestions[appState.currentQuestionIndex];
+                
+                updateProcessingStage('🎤 Transcribing your answer...');
+                const transcribeResponse = await fetch(`${API_BASE_URL}/interview/transcribe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audio_base64: audioBase64.split(',')[1],
+                        question_id: currentQuestion.question_id
+                    })
+                });
+                
+                if (!transcribeResponse.ok) {
+                    const error = await transcribeResponse.json();
+                    throw new Error(`Transcription failed: ${JSON.stringify(error)}`);
+                }
+                
+                const transcriptionData = await transcribeResponse.json();
+                const transcription = transcriptionData.transcription;
+                
+                if (!transcription || transcription.trim().length === 0) {
+                    throw new Error('Transcription returned empty. Please speak clearly and try again.');
+                }
+                
+                displayUserAnswer(transcription);
+                
+                updateProcessingStage('🤖 Analyzing your response with AI...');
+                const analyzeResponse = await fetch(`${API_BASE_URL}/interview/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transcription: transcription,
+                        question_text: currentQuestion.question_text,
+                        question_id: currentQuestion.question_id
+                    })
+                });
+                
+                if (!analyzeResponse.ok) {
+                    const error = await analyzeResponse.json();
+                    throw new Error(`Analysis failed: ${JSON.stringify(error)}`);
+                }
+                
+                const analysisData = await analyzeResponse.json();
+                
+                // Store feedback and score instead of displaying
+                appState.scores.push(analysisData.overall_score);
+                appState.feedbackData.push({
+                    questionIndex: appState.currentQuestionIndex,
+                    question: currentQuestion.question_text,
+                    transcription: transcription,
+                    analysis: analysisData,
+                    confidence: transcriptionData.confidence
+                });
+                
+                console.log(`✅ Question ${appState.currentQuestionIndex + 1} analyzed (score: ${analysisData.overall_score})`);
+                
+                setTimeout(() => {
+                    appState.currentQuestionIndex++;
+                    
+                    appState.isProcessing = false;
+                    document.getElementById('processing-indicator').classList.add('hidden');
+                    document.getElementById('recording-ui').classList.remove('hidden');
+                    lucide.createIcons();
+                    
+                    if (appState.currentQuestionIndex < appState.currentQuestions.length) {
+                        displayQuestion(appState.currentQuestionIndex);
+                    } else {
+                        showInterviewComplete();
+                    }
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                alert(`Error: ${error.message}\n\nPlease try recording again.`);
+                
+                appState.isProcessing = false;
+                document.getElementById('processing-indicator').classList.add('hidden');
+                document.getElementById('recording-ui').classList.remove('hidden');
+                lucide.createIcons();
+            }
+        }
 
+        function displayUserAnswer(transcription) {
+            const chatMessages = document.getElementById('chat-messages');
+            
+            const answerHTML = `
+                <div class="flex flex-row-reverse gap-4 max-w-3xl ml-auto">
+                    <div class="shrink-0 relative group">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=User" alt="User" class="w-10 h-10 rounded-full border-2 border-zinc-800 bg-zinc-900">
+                    </div>
+                    <div class="flex flex-col gap-2 items-end w-full">
+                        <div class="flex items-baseline gap-3">
+                            <span class="text-zinc-100 font-medium text-lg">You</span>
+                        </div>
+                        <div class="bg-emerald-950/10 border border-emerald-500/20 rounded-2xl rounded-tr-sm p-6 w-full shadow-[0_0_15px_-3px_rgba(16,185,129,0.1)]">
+                            <p class="text-zinc-200 text-lg leading-relaxed text-right">${transcription}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            chatMessages.innerHTML += answerHTML;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            lucide.createIcons();
+        }
 
-</body></html>
+        async function showInterviewComplete() {
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Hide recording UI - interview is over
+            document.getElementById('recording-ui').classList.add('hidden');
+            document.getElementById('recording-bar').dataset.state = 'completed';
+            document.getElementById('AI-listening').classList.add('hidden');
+            
+            // Check if interview was 100% completed
+            const isComplete = appState.feedbackData.length === appState.currentQuestions.length;
+            
+            // Calculate overall averages
+            const avgOverall = appState.scores.length > 0 
+                ? (appState.scores.reduce((a, b) => a + b, 0) / appState.scores.length).toFixed(1)
+                : 0;
+            
+            let avgContent = 0, avgClarity = 0, avgConfidence = 0;
+            let allStrengths = [], allImprovements = [];
+            let totalFillerWords = 0;
+            
+            if (appState.feedbackData.length > 0) {
+                // Calculate averages across all questions
+                avgContent = (appState.feedbackData.reduce((sum, d) => sum + d.analysis.content_score, 0) / appState.feedbackData.length).toFixed(1);
+                avgClarity = (appState.feedbackData.reduce((sum, d) => sum + d.analysis.clarity_score, 0) / appState.feedbackData.length).toFixed(1);
+                avgConfidence = (appState.feedbackData.reduce((sum, d) => sum + d.analysis.confidence_score, 0) / appState.feedbackData.length).toFixed(1);
+                
+                // Collect all strengths and improvements (deduplicate)
+                appState.feedbackData.forEach(d => {
+                    d.analysis.strengths.forEach(s => {
+                        if (!allStrengths.includes(s)) allStrengths.push(s);
+                    });
+                    d.analysis.improvements.forEach(i => {
+                        if (!allImprovements.includes(i)) allImprovements.push(i);
+                    });
+                    totalFillerWords += d.analysis.filler_words.count;
+                });
+                
+                // Limit to top 3-4 items
+                allStrengths = allStrengths.slice(0, 3);
+                allImprovements = allImprovements.slice(0, 4);
+            }
+            
+            // Save to Firebase only if 100% complete
+            if (isComplete && appState.sessionId) {
+                console.log('✅ Interview 100% complete - saving to Firebase...');
+                for (let i = 0; i < appState.feedbackData.length; i++) {
+                    const data = appState.feedbackData[i];
+                    const currentQuestion = appState.currentQuestions[data.questionIndex];
+                    
+                    try {
+                        const saveFormData = new FormData();
+                        saveFormData.append('session_id', appState.sessionId);
+                        saveFormData.append('question_id', currentQuestion.question_id);
+                        saveFormData.append('question_text', data.question);
+                        saveFormData.append('transcription', data.transcription);
+                        saveFormData.append('confidence', data.confidence);
+                        
+                        await fetch(`${API_BASE_URL}/interview/save-answer`, {
+                            method: 'POST',
+                            body: saveFormData
+                        });
+                    } catch (saveError) {
+                        console.warn(`⚠️ Failed to save question ${i + 1}:`, saveError);
+                    }
+                }
+                console.log('✅ All answers saved to Firebase');
+                
+                // Mark session as completed
+                try {
+                    await fetch(`${API_BASE_URL}/interview/complete-session`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            session_id: appState.sessionId,
+                            average_score: avgOverall
+                        })
+                    });
+                } catch (error) {
+                    console.warn('⚠️ Failed to update session status:', error);
+                }
+                
+                // Reload history to show the new interview
+                setTimeout(() => loadInterviewHistory(), 1000);
+            } else if (!isComplete) {
+                console.warn('⚠️ Interview incomplete - not saving to Firebase');
+            }
+            
+            // Display ONE overall feedback
+            const overallFeedbackHTML = `
+                <div class="flex gap-4 max-w-3xl mb-8">
+                    <div class="shrink-0">
+                        <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-white"></i>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2 w-full">
+                        <div class="flex items-baseline gap-3">
+                            <span class="text-zinc-100 font-medium text-lg">Overall Performance Feedback</span>
+                        </div>
+                        <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm p-6 shadow-sm space-y-4">
+                            <div class="grid grid-cols-4 gap-3">
+                                <div class="text-center p-3 bg-purple-950/20 border border-purple-500/20 rounded-lg">
+                                    <div class="text-2xl font-bold text-purple-400">${avgOverall}</div>
+                                    <div class="text-xs text-zinc-500">Overall</div>
+                                </div>
+                                <div class="text-center p-3 bg-blue-950/20 border border-blue-500/20 rounded-lg">
+                                    <div class="text-2xl font-bold text-blue-400">${avgContent}</div>
+                                    <div class="text-xs text-zinc-500">Content</div>
+                                </div>
+                                <div class="text-center p-3 bg-green-950/20 border border-green-500/20 rounded-lg">
+                                    <div class="text-2xl font-bold text-green-400">${avgClarity}</div>
+                                    <div class="text-xs text-zinc-500">Clarity</div>
+                                </div>
+                                <div class="text-center p-3 bg-yellow-950/20 border border-yellow-500/20 rounded-lg">
+                                    <div class="text-2xl font-bold text-yellow-400">${avgConfidence}</div>
+                                    <div class="text-xs text-zinc-500">Confidence</div>
+                                </div>
+                            </div>
+                            
+                            ${totalFillerWords > 0 ? `
+                                <div class="p-3 bg-orange-950/20 border border-orange-500/20 rounded-lg">
+                                    <div class="text-sm font-medium text-orange-400 mb-1">Filler Words Detected</div>
+                                    <div class="text-xs text-zinc-400">${totalFillerWords} total across all answers</div>
+                                </div>
+                            ` : ''}
+                            
+                            ${allStrengths.length > 0 ? `
+                                <div class="space-y-2">
+                                    <div class="text-sm font-medium text-green-400">✅ Key Strengths:</div>
+                                    <ul class="text-sm text-zinc-300 space-y-1 list-disc list-inside">
+                                        ${allStrengths.map(s => `<li>${s}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                            
+                            ${allImprovements.length > 0 ? `
+                                <div class="space-y-2">
+                                    <div class="text-sm font-medium text-orange-400">💡 Areas for Improvement:</div>
+                                    <ul class="text-sm text-zinc-300 space-y-1 list-disc list-inside">
+                                        ${allImprovements.map(i => `<li>${i}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="p-3 bg-zinc-800/50 rounded-lg">
+                                <p class="text-sm text-zinc-300 leading-relaxed">
+                                    You answered ${appState.feedbackData.length} out of ${appState.currentQuestions.length} questions. 
+                                    ${isComplete ? 'Great job completing the full interview! ' : 'Consider completing all questions next time. '}
+                                    ${avgOverall >= 70 ? 'You demonstrated strong knowledge and communication skills.' : avgOverall >= 50 ? 'Good effort! Focus on the improvement areas to strengthen your interview skills.' : 'Keep practicing! Review the feedback and work on building confidence in your responses.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            chatMessages.innerHTML += overallFeedbackHTML;
+            
+            // Show completion message
+            const completeHTML = `
+                <div class="flex flex-col items-center justify-center p-12 text-center">
+                    <div class="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+                        <i data-lucide="check-circle" class="w-8 h-8 text-emerald-400"></i>
+                    </div>
+                    <h3 class="text-2xl text-white font-medium mb-2">Interview Complete! 🎉</h3>
+                    <p class="text-zinc-400 mb-4">${isComplete ? 'Great job completing all questions!' : 'Interview ended early'}</p>
+                    <div class="text-3xl text-emerald-400 font-bold mb-2">${avgOverall}/100</div>
+                    <p class="text-sm text-zinc-500">Average Score</p>
+                    ${!isComplete ? `<p class="text-xs text-orange-400 mt-3">⚠️ Not saved - incomplete interview</p>` : ''}
+                </div>
+            `;
+            
+            chatMessages.innerHTML += completeHTML;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            lucide.createIcons();
+        }
+
+        function updateProcessingStage(message) {
+            const stageElement = document.getElementById('processing-stage');
+            if (stageElement) {
+                stageElement.textContent = message;
+            }
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+    </script>
+</body>
+</html>

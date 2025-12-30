@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+from datetime import datetime
 from app.services.question_generator import question_generator_service
 from app.services.interview_store import create_interview_session
 from app.services.answer_store import save_interview_answer
+from app.firebase_realtime import get_db
 from app.models import GenerateQuestionsRequest, GenerateQuestionsResponse
 
 from app.models import (
@@ -18,7 +20,7 @@ import base64
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
-# Question bank
+# Fallback question bank (used if AI generation fails)
 INTERVIEW_QUESTIONS = {
     "q1": "Tell me about yourself.",
     "q2": "What are your greatest strengths?",
@@ -32,12 +34,13 @@ INTERVIEW_QUESTIONS = {
 
 class QuestionSpeakRequest(BaseModel):
     question_id: str
+    question_text: str = None  # Optional: provide question text directly
 
 @router.post("/start-session")
 async def start_interview_session(
     user_id: str = Form(...),
     domain: str = Form(...)
- ):
+):
     """
     Phase 2: Start a new interview session and store it in Firebase
     """
@@ -74,6 +77,30 @@ async def save_answer(
     }
 
 
+class CompleteSessionRequest(BaseModel):
+    session_id: str
+    average_score: float
+
+@router.post("/complete-session")
+async def complete_session(request: CompleteSessionRequest):
+    """
+    Mark interview session as completed and save average score
+    """
+    try:
+        db = get_db()
+        session_ref = db.child("interview_sessions").child(request.session_id)
+        
+        session_ref.update({
+            "status": "completed",
+            "completed_at": datetime.utcnow().isoformat(),
+            "average_score": request.average_score
+        })
+        
+        return {"message": "Session marked as completed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(request: TranscriptionRequest):
     """
@@ -83,28 +110,6 @@ async def transcribe_audio(request: TranscriptionRequest):
         transcription, confidence = await speech_service.transcribe_audio(
             request.audio_base64
         )
-        
-        return TranscriptionResponse(
-            transcription=transcription,
-            confidence=confidence
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/transcribe-file")
-async def transcribe_audio_file(
-    file: UploadFile = File(...),
-    question_id: str = Form(...)
-):
-    """
-    Transcribe audio file (alternative endpoint for file upload)
-    """
-    try:
-        # Read file content
-        audio_content = await file.read()
-        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
-        
-        transcription, confidence = await speech_service.transcribe_audio(audio_base64)
         
         return TranscriptionResponse(
             transcription=transcription,
@@ -128,87 +133,6 @@ async def analyze_answer(request: AnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/complete")
-async def complete_interview(request: SaveAttemptRequest):
-    """
-    Complete interview flow: transcribe + analyze + save
-    This is a convenience endpoint that does everything in one call
-    """
-    try:
-        # Save attempt to Firebase
-        attempt = InterviewAttempt(
-            user_id=request.user_id,
-            question_id=request.question_id,
-            question_text=request.question_text,
-            transcription=request.transcription,
-            analysis=request.analysis,
-            duration_seconds=request.duration_seconds
-        )
-        
-        try:
-            attempt_id = await firebase_service.save_attempt(attempt)
-        except Exception:
-            attempt_id = "mock_attempt_id"
-
-        
-        return {
-            "success": True,
-            "attempt_id": attempt_id,
-            "message": "Interview attempt saved successfully"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/questions")
-async def get_interview_questions():
-    """
-    Get list of interview questions
-    """
-    questions = [
-        {
-            "question_id": "q1",
-            "question_text": "Tell me about yourself.",
-            "category": "introduction"
-        },
-        {
-            "question_id": "q2",
-            "question_text": "What are your greatest strengths?",
-            "category": "behavioral"
-        },
-        {
-            "question_id": "q3",
-            "question_text": "Describe a challenging situation you faced and how you handled it.",
-            "category": "behavioral"
-        },
-        {
-            "question_id": "q4",
-            "question_text": "Where do you see yourself in 5 years?",
-            "category": "career goals"
-        },
-        {
-            "question_id": "q5",
-            "question_text": "Why do you want to work for our company?",
-            "category": "motivation"
-        },
-        {
-            "question_id": "q6",
-            "question_text": "What is your biggest weakness?",
-            "category": "self-awareness"
-        },
-        {
-            "question_id": "q7",
-            "question_text": "Tell me about a time you worked in a team.",
-            "category": "teamwork"
-        },
-        {
-            "question_id": "q8",
-            "question_text": "How do you handle stress and pressure?",
-            "category": "behavioral"
-        }
-    ]
-    
-    return {"questions": questions}
-
 @router.post("/question/speak")
 async def speak_question(request: QuestionSpeakRequest):
     """
@@ -216,7 +140,9 @@ async def speak_question(request: QuestionSpeakRequest):
     Returns the question text and audio in base64 format
     """
     try:
-        question_text = INTERVIEW_QUESTIONS.get(request.question_id)
+        # Use provided question text or fallback to question bank
+        question_text = request.question_text or INTERVIEW_QUESTIONS.get(request.question_id)
+        
         if not question_text:
             raise HTTPException(status_code=404, detail="Question not found")
         
@@ -232,92 +158,6 @@ async def speak_question(request: QuestionSpeakRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/realtime-interview")
-async def realtime_interview_flow(
-    question_id: str = Form(...),
-    audio_file: UploadFile = File(...)
-):
-    """
-    Complete real-time interview flow:
-    1. User submits their audio answer
-    2. Transcribe the answer
-    3. Analyze the answer with AI
-    4. Generate spoken feedback
-    5. Return everything (text + audio feedback)
-    
-    This is the main endpoint for voice-to-voice interview interaction
-    """
-    try:
-        # Get question text
-        question_text = INTERVIEW_QUESTIONS.get(question_id, "Tell me about yourself.")
-        
-        # Transcribe user's audio answer
-        audio_content = await audio_file.read()
-        audio_base64 = base64.b64encode(audio_content).decode('utf-8')
-        transcription, confidence = await speech_service.transcribe_audio(audio_base64)
-        
-        # Analyze the answer with AI
-        analysis = await ai_service.analyze_answer(
-            transcription=transcription,
-            question_text=question_text
-        )
-        
-        # Create concise spoken feedback (keep it short for better UX)
-        feedback_text = (
-            f"Your overall score is {analysis.overall_score} out of 100. "
-            f"Confidence: {analysis.confidence_score}. Clarity: {analysis.clarity_score}. "
-            f"Content: {analysis.content_score}. "
-            f"{analysis.detailed_feedback[:150]}"  # Limit length for faster TTS
-        )
-        
-        # Convert feedback to speech
-        feedback_audio_base64, audio_format = await tts_service.text_to_speech(feedback_text)
-        
-        return {
-            "question_id": question_id,
-            "question_text": question_text,
-            "your_answer": transcription,
-            "transcription_confidence": confidence,
-            "analysis": analysis,
-            "feedback_audio": feedback_audio_base64,
-            "feedback_text": feedback_text,
-            "audio_format": audio_format
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/next-question")
-async def get_next_question(current_question_id: str):
-    try:
-        question_ids = list(INTERVIEW_QUESTIONS.keys())
-
-        # Default to the first question
-        next_index = 0
-        
-        try:
-            current_index = question_ids.index(current_question_id)
-            next_index = (current_index + 1) % len(question_ids)
-        except ValueError:
-            # If current not found, start at 0 (already set)
-            pass
-        
-        next_question_id = question_ids[next_index]
-        next_question_text = INTERVIEW_QUESTIONS[next_question_id]
-
-        audio_base64, audio_format = await tts_service.text_to_speech(next_question_text)
-
-        return {
-            "question_id": next_question_id,
-            "question_text": next_question_text,
-            "audio_base64": audio_base64,
-            "audio_format": audio_format,
-            "is_last": next_index == len(question_ids) - 1
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
 @router.post("/generate-questions", response_model=GenerateQuestionsResponse)
 async def generate_questions(request: GenerateQuestionsRequest):
     """
@@ -329,3 +169,150 @@ async def generate_questions(request: GenerateQuestionsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/history")
+async def get_interview_history(user_id: str):
+    """
+    Get user's interview history from Firebase
+    Returns last 30 days of interview sessions
+    """
+    try:
+        from datetime import datetime, timedelta
+        db = get_db()
+        
+        # Get all sessions for this user
+        user_sessions_ref = db.child("users").child(user_id).child("sessions").get()
+        
+        if not user_sessions_ref:
+            return {"sessions": []}
+        
+        session_ids = list(user_sessions_ref.keys()) if isinstance(user_sessions_ref, dict) else []
+        
+        sessions = []
+        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        
+        for session_id in session_ids:
+            session_data = db.child("interview_sessions").child(session_id).get()
+            
+            if session_data:
+                created_at = datetime.fromisoformat(session_data.get("created_at", ""))
+                
+                # Only include sessions from last 30 days
+                if created_at >= cutoff_date:
+                    # Get answer count from correct location
+                    answers_ref = db.child("interview_sessions").child(session_id).child("answers").get()
+                    answer_count = len(answers_ref) if answers_ref else 0
+                    
+                    sessions.append({
+                        "session_id": session_id,
+                        "domain": session_data.get("domain", "Unknown"),
+                        "created_at": session_data.get("created_at"),
+                        "status": session_data.get("status", "completed"),
+                        "questions_answered": answer_count
+                    })
+        
+        # Sort by date (newest first)
+        sessions.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        return {"sessions": sessions}
+        
+    except Exception as e:
+        print(f"Error fetching history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/session/{session_id}")
+async def get_session_details(session_id: str):
+    """
+    Get full details of an interview session (read-only)
+    """
+    try:
+        db = get_db()
+        
+        # Get session info
+        session_data = db.child("interview_sessions").child(session_id).get()
+        
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get all answers for this session
+        answers_ref = db.child("interview_sessions").child(session_id).child("answers").get()
+        answers = []
+        
+        if answers_ref:
+            for answer_id, answer_data in answers_ref.items():
+                answers.append({
+                    "answer_id": answer_id,
+                    "question_id": answer_data.get("question_id"),
+                    "question_text": answer_data.get("question_text"),
+                    "transcription": answer_data.get("transcription"),
+                    "confidence": answer_data.get("confidence"),
+                    "created_at": answer_data.get("created_at")
+                })
+        
+        # Sort answers by question_id
+        answers.sort(key=lambda x: x.get("question_id", ""))
+        
+        return {
+            "session_id": session_id,
+            "domain": session_data.get("domain"),
+            "created_at": session_data.get("created_at"),
+            "status": session_data.get("status"),
+            "average_score": session_data.get("average_score"),
+            "answers": answers
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Create a new router for user operations
+user_router = APIRouter(prefix="/api/user", tags=["user"])
+
+class DeleteAccountRequest(BaseModel):
+    user_id: str
+
+@user_router.delete("/delete-account")
+async def delete_user_account(request: DeleteAccountRequest):
+    """
+    Delete user account and all associated interview data
+    """
+    try:
+        db = get_db()
+        user_id = request.user_id
+        print(f"🗑️ Deleting account for user: {user_id}")
+        
+        # Get all user sessions
+        user_sessions_ref = db.child("users").child(user_id).child("sessions").get()
+        print(f"   User sessions found: {user_sessions_ref}")
+        
+        if user_sessions_ref:
+            session_ids = list(user_sessions_ref.keys()) if isinstance(user_sessions_ref, dict) else []
+            print(f"   Deleting {len(session_ids)} sessions...")
+            
+            # Delete each interview session and its answers
+            for session_id in session_ids:
+                try:
+                    db.child("interview_sessions").child(session_id).delete()
+                    print(f"   ✓ Deleted session: {session_id}")
+                except Exception as e:
+                    print(f"   ✗ Failed to delete session {session_id}: {e}")
+        
+        # Delete user data
+        try:
+            db.child("users").child(user_id).delete()
+            print(f"   ✓ Deleted user node")
+        except Exception as e:
+            print(f"   ✗ Failed to delete user node: {e}")
+        
+        print(f"✅ Account deletion completed for: {user_id}")
+        return {"message": "Account and all data deleted successfully"}
+        
+    except Exception as e:
+        print(f"❌ Error deleting account: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

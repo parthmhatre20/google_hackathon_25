@@ -49,10 +49,10 @@ def login():
 def signup():
     return render_template('sign_up2.html')
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("login")) if request.method == "GET" else jsonify({"message": "Logged out"})
 
 @app.route('/interview_section')
 @login_required
@@ -63,6 +63,10 @@ def interview_section():
 def test_interview():
     """Test page without authentication - DELETE BEFORE PRODUCTION"""
     return render_template("interview_test.html")
+
+@app.route('/settings')
+def settings():
+    return render_template("settings.html")
 
 @app.route("/session_login", methods=["POST"])
 def session_login():
